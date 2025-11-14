@@ -131,6 +131,12 @@
   color: #0284c7;
 }
 
+.about-page__link--github {
+  font-size: 1.1rem;
+  font-weight: 600;
+  word-break: break-all;
+}
+
 @media (max-width: 768px) {
   .about-page {
     padding: 1.5rem 0.75rem;

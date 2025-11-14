@@ -138,13 +138,21 @@ export function AboutPage() {
               <strong>🔗 Accéder au code source :</strong>
             </p>
             <p>
-              Le dépôt GitHub sera disponible prochainement. En attendant, vous pouvez consulter
-              le code source localement ou contribuer au développement.
+              Le code source complet est disponible sur GitHub :
             </p>
-            <p className="about-page__note">
-              <em>
-                Note : Le lien GitHub sera ajouté dès que le dépôt sera rendu public.
-              </em>
+            <p>
+              <a
+                href="https://github.com/MaillardBenjamin/longview"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="about-page__link about-page__link--github"
+              >
+                https://github.com/MaillardBenjamin/longview
+              </a>
+            </p>
+            <p>
+              Vous pouvez y consulter le code, signaler des bugs, proposer des améliorations
+              ou contribuer directement au projet.
             </p>
           </div>
         </section>
