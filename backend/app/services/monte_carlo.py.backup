@@ -1,0 +1,864 @@
+from __future__ import annotations
+
+import logging
+import math
+import random
+import statistics
+from dataclasses import dataclass
+from typing import Dict, List, NamedTuple
+
+from app.schemas.projections import (
+    AdditionalIncome,
+    InvestmentAccount,
+    MarketAssetAssumption,
+    MarketAssumptions,
+    MonteCarloInput,
+    MonteCarloPercentilePoint,
+    MonteCarloResult,
+    RetirementMonteCarloInput,
+    RetirementMonteCarloPoint,
+    RetirementMonteCarloResult,
+    SpendingPhase,
+    RetirementScenarioResults,
+    SavingsOptimizationInput,
+    RecommendedSavingsResult,
+    OptimizationStep,
+    SavingsPhase,
+)
+from app.services.capitalization import (
+    _account_gross_monthly_return,
+    _account_tax_rate,
+    _active_monthly_contribution,
+    _asset_expected_return,
+    _distribute_contributions,
+)
+from statistics import NormalDist
+
+# Route our logs through uvicorn's logger so they appear alongside server output
+logger = logging.getLogger("uvicorn.error").getChild("monte_carlo")
+logger.setLevel(logging.INFO)
+
+DEFAULT_VOLATILITIES = {
+    "equities": 15.0,
+    "bonds": 6.0,
+    "livrets": 0.5,
+    "crypto": 80.0,
+    "other": 10.0,
+}
+
+DEFAULT_CORRELATIONS = {
+    "equities": {"bonds": 0.3, "livrets": 0.05, "crypto": 0.4, "other": 0.6},
+    "bonds": {"equities": 0.3, "livrets": 0.2, "crypto": 0.1, "other": 0.4},
+    "livrets": {"equities": 0.05, "bonds": 0.2, "crypto": -0.05, "other": 0.1},
+    "crypto": {"equities": 0.4, "bonds": 0.1, "livrets": -0.05, "other": 0.5},
+    "other": {"equities": 0.6, "bonds": 0.4, "livrets": 0.1, "crypto": 0.5},
+}
+
+ASSET_KEYS = ["equities", "bonds", "livrets", "crypto", "other"]
+
+
+@dataclass
+class AccountState:
+    account: InvestmentAccount
+    balance: float
+
+
+def simulate_monte_carlo(payload: MonteCarloInput) -> MonteCarloResult:
+    if not payload.adults:
+        raise ValueError("At least one adult profile is required to run the simulation.")
+
+    primary_adult = payload.adults[0]
+    if primary_adult.retirement_age <= primary_adult.current_age:
+        raise ValueError("Retirement age must be greater than current age for simulation.")
+
+    total_months = int((primary_adult.retirement_age - primary_adult.current_age) * 12)
+    if total_months <= 0:
+        raise ValueError("Simulation horizon must be at least one month.")
+
+    results: List[float] = []
+    monthly_paths: List[List[float]] = []
+    contribution_path: List[float] | None = None
+    batch_size = payload.batch_size
+    max_iterations = payload.max_iterations
+    confidence_level = payload.confidence_level
+    tolerance_ratio = payload.tolerance_ratio
+
+    iterations = 0
+    while iterations < max_iterations:
+        batch = min(batch_size, max_iterations - iterations)
+        for _ in range(batch):
+            final_capital, monthly_totals, monthly_contributions = _simulate_single_run(payload, total_months)
+            results.append(final_capital)
+            monthly_paths.append(monthly_totals)
+            if contribution_path is None:
+                contribution_path = monthly_contributions
+        iterations = len(results)
+        if iterations < batch_size:
+            continue
+        if _confidence_reached(results, confidence_level, tolerance_ratio):
+            break
+
+    sorted_results = sorted(results)
+    mean_val = statistics.fmean(sorted_results) if sorted_results else 0.0
+    stdev_val = statistics.pstdev(sorted_results) if sorted_results else 0.0
+
+    percentile_sorted = lambda p: _percentile_from_sorted(sorted_results, p)
+
+    monthly_percentiles = _compute_monthly_percentiles(
+        monthly_paths,
+        primary_adult.current_age,
+        contribution_path,
+    )
+
+    return MonteCarloResult(
+        iterations=len(sorted_results),
+        confidence_level=confidence_level,
+        tolerance_ratio=tolerance_ratio,
+        confidence_reached=_confidence_reached(sorted_results, confidence_level, tolerance_ratio),
+        mean_final_capital=mean_val,
+        median_final_capital=percentile_sorted(0.5),
+        percentile_10=percentile_sorted(0.1),
+        percentile_50=percentile_sorted(0.5),
+        percentile_90=percentile_sorted(0.9),
+        percentile_min=percentile_sorted(0.05),
+        percentile_max=percentile_sorted(0.95),
+        standard_deviation=stdev_val,
+        monthly_percentiles=monthly_percentiles,
+    )
+
+
+def _simulate_single_run(payload: MonteCarloInput, total_months: int) -> tuple[float, List[float], List[float]]:
+    accounts = [AccountState(account=acc, balance=float(acc.current_amount)) for acc in payload.investment_accounts]
+    market_assumptions = payload.market_assumptions
+    asset_classes = market_assumptions.asset_classes if market_assumptions else {}
+
+    monthly_totals: List[float] = []
+    monthly_contributions: List[float] = []
+    cumulative_contribution = sum(state.balance for state in accounts)
+
+    for month_index in range(total_months):
+        age = payload.adults[0].current_age + month_index / 12
+        active_contribution = _active_monthly_contribution(
+            payload.savings_phases,
+            [state.account for state in accounts],
+            age,
+        )
+        contributions = _distribute_contributions(accounts, active_contribution)
+
+        base_returns = _sample_monthly_asset_returns(market_assumptions)
+
+        month_contribution = 0.0
+        for state, contribution in zip(accounts, contributions):
+            state.balance += contribution
+            month_contribution += contribution
+            monthly_return = _account_return_from_asset_sample(state.account, base_returns, asset_classes)
+            state.balance *= 1 + monthly_return
+
+        cumulative_contribution += month_contribution
+        monthly_totals.append(sum(state.balance for state in accounts))
+        monthly_contributions.append(cumulative_contribution)
+
+    final_capital = monthly_totals[-1] if monthly_totals else cumulative_contribution
+    return final_capital, monthly_totals, monthly_contributions
+
+
+def _confidence_reached(values: List[float], confidence_level: float, tolerance_ratio: float) -> bool:
+    n = len(values)
+    if n < 200:
+        return False
+    mean_val = statistics.fmean(values)
+    stdev_val = statistics.pstdev(values)
+    if mean_val == 0:
+        return stdev_val == 0
+    z_score = _z_value(confidence_level)
+    if z_score is None:
+        return False
+    standard_error = stdev_val / math.sqrt(n)
+    margin = z_score * standard_error
+    return margin <= abs(mean_val) * tolerance_ratio
+
+
+def _z_value(confidence_level: float) -> float | None:
+    if not (0.5 < confidence_level < 0.9999):
+        return None
+    return NormalDist().inv_cdf(0.5 + confidence_level / 2)
+
+
+def _sample_monthly_asset_returns(market_assumptions: MarketAssumptions | None) -> Dict[str, float]:
+    asset_classes = market_assumptions.asset_classes if market_assumptions else {}
+    correlations = market_assumptions.correlations if market_assumptions else {}
+
+    means = [_asset_monthly_mean(asset_classes, key) for key in ASSET_KEYS]
+    stds = [_asset_monthly_std(asset_classes, key) for key in ASSET_KEYS]
+
+    covariance = _build_covariance_matrix(ASSET_KEYS, stds, correlations)
+
+    try:
+        cholesky = _cholesky_decomposition(covariance)
+        normals = [random.gauss(0.0, 1.0) for _ in ASSET_KEYS]
+        correlated = [
+            means[i] + sum(cholesky[i][k] * normals[k] for k in range(len(ASSET_KEYS)))
+            for i in range(len(ASSET_KEYS))
+        ]
+    except ValueError:
+        logger.warning("Correlation matrix not positive definite; falling back to independent sampling.")
+        correlated = [random.gauss(means[i], stds[i]) for i in range(len(ASSET_KEYS))]
+
+    returns = dict(zip(ASSET_KEYS, correlated))
+
+    inflation_mean = (market_assumptions.inflation_mean if market_assumptions else 0.0) or 0.0
+    inflation_vol = (market_assumptions.inflation_volatility if market_assumptions else 0.0) or 0.0
+    if inflation_mean != 0.0 or inflation_vol != 0.0:
+        monthly_mean = inflation_mean / 100 / 12
+        monthly_std = inflation_vol / 100 / math.sqrt(12)
+        inflation_sample = random.gauss(monthly_mean, monthly_std)
+        for key in returns:
+            returns[key] -= inflation_sample
+
+    return returns
+
+
+def _build_covariance_matrix(keys: List[str], stds: List[float], correlations: Dict[str, Dict[str, float]]) -> List[List[float]]:
+    matrix: List[List[float]] = []
+    for i, key_i in enumerate(keys):
+        row: List[float] = []
+        for j, key_j in enumerate(keys):
+            if i == j:
+                row.append(stds[i] ** 2)
+            else:
+                corr = _get_correlation_value(key_i, key_j, correlations)
+                row.append(corr * stds[i] * stds[j])
+        matrix.append(row)
+    return matrix
+
+
+def _get_correlation_value(key_i: str, key_j: str, correlations: Dict[str, Dict[str, float]]) -> float:
+    if key_i == key_j:
+        return 1.0
+    if key_i in correlations and key_j in correlations[key_i]:
+        return correlations[key_i][key_j]
+    if key_j in correlations and key_i in correlations[key_j]:
+        return correlations[key_j][key_i]
+    if key_i in DEFAULT_CORRELATIONS and key_j in DEFAULT_CORRELATIONS[key_i]:
+        return DEFAULT_CORRELATIONS[key_i][key_j]
+    if key_j in DEFAULT_CORRELATIONS and key_i in DEFAULT_CORRELATIONS[key_j]:
+        return DEFAULT_CORRELATIONS[key_j][key_i]
+    return 0.0
+
+
+def _cholesky_decomposition(matrix: List[List[float]]) -> List[List[float]]:
+    n = len(matrix)
+    lower = [[0.0] * n for _ in range(n)]
+
+    for i in range(n):
+        for j in range(i + 1):
+            sum_value = sum(lower[i][k] * lower[j][k] for k in range(j))
+            if i == j:
+                value = matrix[i][i] - sum_value
+                if value <= 0:
+                    raise ValueError("Matrix is not positive definite")
+                lower[i][j] = math.sqrt(value)
+            else:
+                if lower[j][j] == 0:
+                    raise ValueError("Matrix is not positive definite")
+                lower[i][j] = (matrix[i][j] - sum_value) / lower[j][j]
+
+    return lower
+
+
+def _asset_monthly_mean(asset_classes: Dict[str, MarketAssetAssumption], key: str) -> float:
+    annual = _asset_expected_return(asset_classes, key)
+    return annual / 12
+
+
+def _asset_monthly_std(asset_classes: Dict[str, MarketAssetAssumption], key: str) -> float:
+    assumption = asset_classes.get(key)
+    if assumption and assumption.volatility is not None:
+        annual_vol = assumption.volatility / 100
+    else:
+        annual_vol = DEFAULT_VOLATILITIES[key] / 100
+    return annual_vol / math.sqrt(12)
+
+
+def _account_return_from_asset_sample(
+    account: InvestmentAccount,
+    base_returns: Dict[str, float],
+    asset_classes: Dict[str, MarketAssetAssumption],
+) -> float:
+    gross = _account_gross_return_from_sample(account, base_returns, asset_classes)
+    tax_rate = _account_tax_rate(account)
+    return gross * (1 - tax_rate)
+
+
+def _account_gross_return_from_sample(
+    account: InvestmentAccount,
+    base_returns: Dict[str, float],
+    asset_classes: Dict[str, MarketAssetAssumption],
+) -> float:
+    def adjust(sample: float, base_mean: float, target_mean: float) -> float:
+        return sample + (target_mean - base_mean)
+
+    account_type = account.type.value if hasattr(account.type, "value") else str(account.type)
+
+    if account_type in {"pea", "cto"}:
+        base_key = "equities"
+        base_mean = _asset_monthly_mean(asset_classes, base_key)
+        target_mean = _account_gross_monthly_return(account, asset_classes)
+        return adjust(base_returns[base_key], base_mean, target_mean)
+
+    if account_type in {"per", "assurance_vie"}:
+        actions = (account.allocation_actions or 0.0) / 100
+        obligations = (account.allocation_obligations or 0.0) / 100
+        remaining = max(0.0, 1.0 - actions - obligations)
+
+        base_return = (
+            actions * base_returns["equities"]
+            + obligations * base_returns["bonds"]
+            + remaining * base_returns["other"]
+        )
+        base_mean = (
+            actions * _asset_monthly_mean(asset_classes, "equities")
+            + obligations * _asset_monthly_mean(asset_classes, "bonds")
+            + remaining * _asset_monthly_mean(asset_classes, "other")
+        )
+        target_mean = _account_gross_monthly_return(account, asset_classes)
+        return adjust(base_return, base_mean, target_mean)
+
+    if account_type == "livret":
+        base_key = "livrets"
+        base_mean = _asset_monthly_mean(asset_classes, base_key)
+        target_mean = _account_gross_monthly_return(account, asset_classes)
+        return adjust(base_returns[base_key], base_mean, target_mean)
+
+    if account_type == "crypto":
+        base_key = "crypto"
+        base_mean = _asset_monthly_mean(asset_classes, base_key)
+        target_mean = _account_gross_monthly_return(account, asset_classes)
+        return adjust(base_returns[base_key], base_mean, target_mean)
+
+    base_key = "other"
+    base_mean = _asset_monthly_mean(asset_classes, base_key)
+    target_mean = _account_gross_monthly_return(account, asset_classes)
+    return adjust(base_returns[base_key], base_mean, target_mean)
+
+
+def _percentile(values: List[float], p: float) -> float:
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    return _percentile_from_sorted(sorted_vals, p)
+
+
+def _percentile_from_sorted(sorted_vals: List[float], p: float) -> float:
+    if not sorted_vals:
+        return 0.0
+    if len(sorted_vals) == 1:
+        return sorted_vals[0]
+    index = int(p * (len(sorted_vals) - 1))
+    index = max(0, min(len(sorted_vals) - 1, index))
+    return sorted_vals[index]
+
+
+def _compute_monthly_percentiles(
+    monthly_paths: List[List[float]],
+    start_age: float,
+    contributions: List[float] | None,
+) -> List[MonteCarloPercentilePoint]:
+    if not monthly_paths:
+        return []
+
+    months = len(monthly_paths[0])
+    points: List[MonteCarloPercentilePoint] = []
+
+    for month_idx in range(months):
+        month_values = [path[month_idx] for path in monthly_paths if len(path) > month_idx]
+        if not month_values:
+            continue
+        sorted_month = sorted(month_values)
+        contribution_value = contributions[month_idx] if contributions and len(contributions) > month_idx else 0.0
+        point = MonteCarloPercentilePoint(
+            month_index=month_idx + 1,
+            age=start_age + month_idx / 12,
+            percentile_min=_percentile_from_sorted(sorted_month, 0.05),
+            percentile_10=_percentile_from_sorted(sorted_month, 0.1),
+            percentile_50=_percentile_from_sorted(sorted_month, 0.5),
+            percentile_90=_percentile_from_sorted(sorted_month, 0.9),
+            percentile_max=_percentile_from_sorted(sorted_month, 0.95),
+            cumulative_contribution=contribution_value,
+        )
+        points.append(point)
+
+    return points
+
+
+def simulate_retirement_monte_carlo(payload: RetirementMonteCarloInput) -> RetirementMonteCarloResult:
+    if not payload.adults:
+        raise ValueError("At least one adult profile is required to run the simulation.")
+
+    primary_adult = payload.adults[0]
+    life_expectancy = primary_adult.life_expectancy
+    retirement_age = primary_adult.retirement_age
+
+    if life_expectancy is None or life_expectancy <= retirement_age:
+        raise ValueError("Life expectancy must be defined and greater than retirement age for retirement simulation.")
+
+    total_months = int((life_expectancy - retirement_age) * 12)
+    if total_months <= 0:
+        raise ValueError("Retirement horizon must be at least one month.")
+
+    results: List[float] = []
+    monthly_paths: List[List[float]] = []
+    withdrawal_reference: List[tuple[float, float]] | None = None
+
+    batch_size = payload.batch_size
+    max_iterations = payload.max_iterations
+    confidence_level = payload.confidence_level
+    tolerance_ratio = payload.tolerance_ratio
+
+    iterations = 0
+    while iterations < max_iterations:
+        batch = min(batch_size, max_iterations - iterations)
+        for _ in range(batch):
+            (
+                final_capital,
+                monthly_totals,
+                monthly_withdrawals,
+                cumulative_withdrawals,
+            ) = _simulate_retirement_single_run(payload, total_months, retirement_age)
+            results.append(final_capital)
+            monthly_paths.append(monthly_totals)
+            if withdrawal_reference is None:
+                withdrawal_reference = list(zip(monthly_withdrawals, cumulative_withdrawals))
+        iterations = len(results)
+        if iterations < batch_size:
+            continue
+        if _confidence_reached(results, confidence_level, tolerance_ratio):
+            break
+
+    sorted_results = sorted(results)
+    percentile_sorted = lambda p: _percentile_from_sorted(sorted_results, p)
+    mean_val = statistics.fmean(sorted_results) if sorted_results else 0.0
+    stdev_val = statistics.pstdev(sorted_results) if sorted_results else 0.0
+
+    monthly_percentiles = _compute_retirement_percentiles(
+        monthly_paths,
+        retirement_age,
+        withdrawal_reference,
+    )
+
+    return RetirementMonteCarloResult(
+        iterations=len(sorted_results),
+        confidence_level=confidence_level,
+        tolerance_ratio=tolerance_ratio,
+        confidence_reached=_confidence_reached(sorted_results, confidence_level, tolerance_ratio),
+        mean_final_capital=mean_val,
+        median_final_capital=percentile_sorted(0.5),
+        percentile_10=percentile_sorted(0.1),
+        percentile_50=percentile_sorted(0.5),
+        percentile_90=percentile_sorted(0.9),
+        percentile_min=percentile_sorted(0.05),
+        percentile_max=percentile_sorted(0.95),
+        standard_deviation=stdev_val,
+        monthly_percentiles=monthly_percentiles,
+    )
+
+
+def _simulate_retirement_single_run(
+    payload: RetirementMonteCarloInput,
+    total_months: int,
+    retirement_age: float,
+) -> tuple[float, List[float], List[float], List[float]]:
+    accounts = [AccountState(account=acc, balance=float(acc.current_amount)) for acc in payload.investment_accounts]
+    asset_classes = payload.market_assumptions.asset_classes if payload.market_assumptions else {}
+
+    monthly_totals: List[float] = []
+    monthly_withdrawals: List[float] = []
+    cumulative_withdrawals: List[float] = []
+
+    cumulative_withdrawal = 0.0
+
+    for month_index in range(total_months):
+        age = retirement_age + month_index / 12
+
+        target_income = payload.target_monthly_income * _spending_ratio(payload.spending_profile, age)
+        pension_income = payload.state_pension_monthly_income
+        additional_income = _additional_income_amount(payload.additional_income_streams or [], age)
+        required_withdrawal = max(0.0, target_income - pension_income - additional_income)
+
+        total_balance = sum(state.balance for state in accounts)
+        actual_withdrawal = min(required_withdrawal, total_balance) if total_balance > 0 else 0.0
+
+        if actual_withdrawal > 0 and total_balance > 0:
+            for state in accounts:
+                share = state.balance / total_balance if total_balance > 0 else 0.0
+                state.balance -= actual_withdrawal * share
+                if state.balance < 0:
+                    state.balance = 0.0
+
+        cumulative_withdrawal += actual_withdrawal
+        monthly_withdrawals.append(actual_withdrawal)
+        cumulative_withdrawals.append(cumulative_withdrawal)
+
+        base_returns = _sample_monthly_asset_returns(payload.market_assumptions)
+        for state in accounts:
+            if state.balance <= 0:
+                continue
+            monthly_return = _account_return_from_asset_sample(state.account, base_returns, asset_classes)
+            state.balance *= 1 + monthly_return
+
+        monthly_totals.append(sum(state.balance for state in accounts))
+
+    final_capital = sum(state.balance for state in accounts)
+    return final_capital, monthly_totals, monthly_withdrawals, cumulative_withdrawals
+
+
+def _compute_retirement_percentiles(
+    monthly_paths: List[List[float]],
+    start_age: float,
+    withdrawal_reference: List[tuple[float, float]] | None,
+) -> List[RetirementMonteCarloPoint]:
+    if not monthly_paths:
+        return []
+
+    months = len(monthly_paths[0])
+    points: List[RetirementMonteCarloPoint] = []
+
+    for month_idx in range(months):
+        month_values = [path[month_idx] for path in monthly_paths if len(path) > month_idx]
+        if not month_values:
+            continue
+        sorted_month = sorted(month_values)
+
+        monthly_withdrawal = 0.0
+        cumulative_withdrawal = 0.0
+        if withdrawal_reference and len(withdrawal_reference) > month_idx:
+            monthly_withdrawal, cumulative_withdrawal = withdrawal_reference[month_idx]
+
+        points.append(
+            RetirementMonteCarloPoint(
+                month_index=month_idx + 1,
+                age=start_age + month_idx / 12,
+                monthly_withdrawal=monthly_withdrawal,
+                cumulative_withdrawal=cumulative_withdrawal,
+                percentile_min=_percentile_from_sorted(sorted_month, 0.05),
+                percentile_10=_percentile_from_sorted(sorted_month, 0.1),
+                percentile_50=_percentile_from_sorted(sorted_month, 0.5),
+                percentile_90=_percentile_from_sorted(sorted_month, 0.9),
+                percentile_max=_percentile_from_sorted(sorted_month, 0.95),
+            )
+        )
+
+    return points
+
+
+def _spending_ratio(spending_profile: List[SpendingPhase], age: float) -> float:
+    for phase in spending_profile:
+        if phase.from_age <= age <= phase.to_age:
+            return max(phase.spending_ratio, 0.0)
+    return 1.0
+
+
+def _additional_income_amount(incomes: List[AdditionalIncome], age: float) -> float:
+    total = 0.0
+    for income in incomes:
+        start_age = income.start_age if income.start_age is not None else age
+        if age >= start_age:
+            total += income.monthly_amount
+    return total
+
+
+def optimize_savings_plan(payload: SavingsOptimizationInput) -> RecommendedSavingsResult:
+    logger.info("Starting Monte Carlo savings optimisation targeting %.2f € at end of life.", payload.target_final_capital)
+
+    tolerance_capital = max(100.0, abs(payload.target_final_capital) * payload.tolerance_ratio)
+    max_iterations = max(payload.max_iterations, 5)
+    steps: List[OptimizationStep] = []
+
+    class EvaluationResult(NamedTuple):
+        scale: float
+        total_savings: float
+        final_capital: float
+        effective_final_capital: float
+        error: float
+        depletion_months: int
+        accumulation: MonteCarloResult
+        retirement: RetirementScenarioResults
+        sufficient: bool
+
+    iteration_counter = -1
+    best_candidate: EvaluationResult | None = None
+    best_sufficient: EvaluationResult | None = None
+
+    def register_candidate(result: EvaluationResult) -> None:
+        nonlocal best_candidate, best_sufficient
+
+        if best_candidate is None or (
+            result.depletion_months < best_candidate.depletion_months
+            or (
+                result.depletion_months == best_candidate.depletion_months
+                and result.effective_final_capital > best_candidate.effective_final_capital
+            )
+        ):
+            best_candidate = result
+
+        if result.sufficient and (
+            best_sufficient is None or result.total_savings < best_sufficient.total_savings
+        ):
+            best_sufficient = result
+
+    def evaluate(scale: float) -> EvaluationResult:
+        nonlocal iteration_counter
+        iteration_counter += 1
+
+        scaled_phases = _scale_savings_phases(payload.savings_phases, scale)
+        scaled_accounts = _scale_investment_accounts(payload.investment_accounts, scale)
+
+        mc_input = MonteCarloInput(
+            adults=payload.adults,
+            savings_phases=scaled_phases,
+            investment_accounts=scaled_accounts,
+            market_assumptions=payload.market_assumptions,
+            confidence_level=payload.confidence_level,
+            tolerance_ratio=payload.tolerance_ratio,
+            max_iterations=max(payload.max_iterations, 100),
+            batch_size=payload.batch_size,
+        )
+
+        accumulation_result = simulate_monte_carlo(mc_input)
+        retirement_results = _run_retirement_scenarios(payload, scaled_accounts, accumulation_result)
+
+        final_capital = retirement_results.median.median_final_capital
+        total_savings = sum(account.monthly_contribution or 0.0 for account in scaled_accounts)
+
+        early_penalty = 0.0
+        months_remaining_penalty = 0
+        median_series = retirement_results.median.monthly_percentiles or []
+        if median_series:
+            final_index = len(median_series) - 1
+            for idx, point in enumerate(median_series[:-1]):
+                if point.percentile_50 <= 0:
+                    months_remaining_penalty = final_index - idx
+                    penalty_base = payload.target_monthly_income or payload.state_pension_monthly_income or 1000.0
+                    early_penalty = max(1.0, penalty_base) * max(1, months_remaining_penalty)
+                    logger.info(
+                        "Median capital depleted %.1f years before horizon → applying penalty %.2f € (missing %d months).",
+                        months_remaining_penalty / 12,
+                        early_penalty,
+                        months_remaining_penalty,
+                    )
+                    break
+
+        effective_final_capital = final_capital - early_penalty
+        error = effective_final_capital - payload.target_final_capital
+        sufficient = months_remaining_penalty == 0 and error >= -tolerance_capital
+
+        steps.append(
+            OptimizationStep(
+                iteration=iteration_counter,
+                scale=scale,
+                monthly_savings=total_savings,
+                final_capital=final_capital,
+                effective_final_capital=effective_final_capital,
+                depletion_months=months_remaining_penalty,
+            )
+        )
+
+        logger.info(
+            "Savings optimisation step %d → scale=%.4f, gross capital=%.2f €, effective=%.2f €, monthly savings=%.2f €, depletion=%d months",
+            iteration_counter,
+            scale,
+            final_capital,
+            effective_final_capital,
+            total_savings,
+            months_remaining_penalty,
+        )
+
+        result = EvaluationResult(
+            scale=scale,
+            total_savings=total_savings,
+            final_capital=final_capital,
+            effective_final_capital=effective_final_capital,
+            error=error,
+            depletion_months=months_remaining_penalty,
+            accumulation=accumulation_result,
+            retirement=retirement_results,
+            sufficient=sufficient,
+        )
+        register_candidate(result)
+        return result
+
+    low = evaluate(0.0)
+    if low.sufficient:
+        logger.info("Target reached with existing savings (scale 0).")
+        final_choice = low
+    else:
+        high_scale = 1.0
+        high = evaluate(high_scale)
+        attempts = 0
+        while not high.sufficient and attempts < 12 and high_scale < 512:
+            low = high
+            high_scale *= 2
+            high = evaluate(high_scale)
+            attempts += 1
+
+        if not high.sufficient:
+            logger.warning(
+                "Unable to reach the target even with scale %.2f. Returning best available scenario.",
+                high_scale,
+            )
+            final_choice = best_candidate or high
+        else:
+            low_result = low
+            high_result = high
+            iterations_remaining = max(0, max_iterations - len(steps))
+
+            for _ in range(iterations_remaining):
+                if high_result.scale - low_result.scale < 1e-4:
+                    break
+
+                mid_scale = (low_result.scale + high_result.scale) / 2
+                mid = evaluate(mid_scale)
+
+                if mid.sufficient:
+                    high_result = mid
+                    if abs(mid.error) <= tolerance_capital:
+                        break
+                else:
+                    low_result = mid
+
+            final_choice = best_sufficient or high_result
+
+    logger.info(
+        "Optimisation completed: scale=%.4f, gross capital=%.2f €, effective=%.2f €, monthly savings=%.2f €, depletion=%d months",
+        final_choice.scale,
+        final_choice.final_capital,
+        final_choice.effective_final_capital,
+        final_choice.total_savings,
+        final_choice.depletion_months,
+    )
+
+    return RecommendedSavingsResult(
+        scale=final_choice.scale,
+        recommended_monthly_savings=max(0.0, final_choice.total_savings),
+        monte_carlo_result=final_choice.accumulation,
+        retirement_results=final_choice.retirement,
+        steps=steps,
+        residual_error=final_choice.error,
+        residual_error_ratio=(
+            final_choice.error / max(abs(payload.target_final_capital), 1.0)
+            if payload.target_final_capital != 0
+            else final_choice.error / max(abs(final_choice.effective_final_capital), 1.0)
+        ),
+    )
+
+
+def _scale_savings_phases(phases: List[SavingsPhase], scale: float) -> List[SavingsPhase]:
+    return [
+        phase.model_copy(
+            update={
+                "monthly_contribution": max(0.0, phase.monthly_contribution * scale),
+            }
+        )
+        for phase in phases
+    ]
+
+
+def _scale_investment_accounts(accounts: List[InvestmentAccount], scale: float) -> List[InvestmentAccount]:
+    return [
+        account.model_copy(
+            update={
+                "monthly_contribution": max(0.0, (account.monthly_contribution or 0.0) * scale),
+            }
+        )
+        for account in accounts
+    ]
+
+
+def _run_retirement_scenarios(
+    payload: SavingsOptimizationInput,
+    scaled_accounts: List[InvestmentAccount],
+    accumulation_result: MonteCarloResult,
+) -> RetirementScenarioResults:
+    pessimistic_accounts = _build_retirement_accounts(scaled_accounts, accumulation_result.percentile_10)
+    median_accounts = _build_retirement_accounts(scaled_accounts, accumulation_result.percentile_50)
+    optimistic_accounts = _build_retirement_accounts(scaled_accounts, accumulation_result.percentile_90)
+
+    base_kwargs = dict(
+        adults=payload.adults,
+        market_assumptions=payload.market_assumptions,
+        spending_profile=payload.spending_profile,
+        target_monthly_income=payload.target_monthly_income,
+        state_pension_monthly_income=payload.state_pension_monthly_income,
+        additional_income_streams=payload.additional_income_streams,
+        confidence_level=payload.confidence_level,
+        tolerance_ratio=payload.tolerance_ratio,
+        max_iterations=max(payload.max_iterations, 100),
+        batch_size=payload.batch_size,
+    )
+
+    pessimistic_result = simulate_retirement_monte_carlo(
+        RetirementMonteCarloInput(investment_accounts=pessimistic_accounts, **base_kwargs)
+    )
+    median_result = simulate_retirement_monte_carlo(
+        RetirementMonteCarloInput(investment_accounts=median_accounts, **base_kwargs)
+    )
+    optimistic_result = simulate_retirement_monte_carlo(
+        RetirementMonteCarloInput(investment_accounts=optimistic_accounts, **base_kwargs)
+    )
+
+    return RetirementScenarioResults(
+        pessimistic=pessimistic_result,
+        median=median_result,
+        optimistic=optimistic_result,
+    )
+
+
+def _build_retirement_accounts(
+    accounts: List[InvestmentAccount],
+    total_capital: float,
+) -> List[InvestmentAccount]:
+    if total_capital <= 0:
+        return [
+            account.model_copy(update={"current_amount": 0.0, "monthly_contribution": 0.0, "monthly_contribution_share": 0.0})
+            for account in accounts
+        ]
+
+    weights = _account_weights(accounts)
+    retirement_accounts: List[InvestmentAccount] = []
+    for account, weight in zip(accounts, weights):
+        retirement_accounts.append(
+            account.model_copy(
+                update={
+                    "current_amount": total_capital * weight,
+                    "monthly_contribution": 0.0,
+                    "monthly_contribution_share": weight * 100,
+                }
+            )
+        )
+    return retirement_accounts
+
+
+def _account_weights(accounts: List[InvestmentAccount]) -> List[float]:
+    if not accounts:
+        return []
+    raw_weights: List[float] = []
+    for account in accounts:
+        contribution = account.monthly_contribution or 0.0
+        if contribution > 0:
+            raw_weights.append(contribution)
+            continue
+        share = account.monthly_contribution_share or 0.0
+        if share > 0:
+            raw_weights.append(share)
+            continue
+        current = account.current_amount or 0.0
+        if current > 0:
+            raw_weights.append(current)
+            continue
+        raw_weights.append(1.0)
+
+    total = sum(raw_weights)
+    if total <= 0:
+        equal_weight = 1.0 / len(accounts)
+        return [equal_weight for _ in accounts]
+    return [weight / total for weight in raw_weights]

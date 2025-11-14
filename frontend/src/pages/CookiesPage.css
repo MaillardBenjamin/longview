@@ -1,0 +1,173 @@
+.cookies-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.cookies-page__header {
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.cookies-page__header h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.cookies-page__last-update {
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.cookies-page__content {
+  line-height: 1.7;
+  color: #334155;
+}
+
+.cookies-page__section {
+  margin-bottom: 2.5rem;
+}
+
+.cookies-page__section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 1rem;
+  margin-top: 2rem;
+}
+
+.cookies-page__section h3 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.cookies-page__section p {
+  margin-bottom: 1rem;
+}
+
+.cookies-page__section ul {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.cookies-page__section li {
+  margin-bottom: 0.5rem;
+}
+
+.cookies-page__table {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+.cookies-page__table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #f8fafc;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.cookies-page__table thead {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.cookies-page__table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cookies-page__table td {
+  padding: 1rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.cookies-page__table tbody tr:hover {
+  background: #f1f5f9;
+}
+
+.cookies-page__table code {
+  background: #e2e8f0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  font-family: "Courier New", monospace;
+  font-size: 0.85rem;
+  color: #0f172a;
+}
+
+.cookies-page__info-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.cookies-page__info-box p {
+  margin-bottom: 1.25rem;
+}
+
+.cookies-page__info-box p:last-child {
+  margin-bottom: 0;
+}
+
+.cookies-page__warning {
+  background: #fef3c7;
+  border-left: 4px solid #f59e0b;
+  padding: 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0.5rem;
+}
+
+.cookies-page__warning p {
+  margin: 0;
+  color: #92400e;
+}
+
+.cookies-page__link {
+  color: #0ea5e9;
+  text-decoration: underline;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.cookies-page__link:hover {
+  color: #0284c7;
+}
+
+@media (max-width: 768px) {
+  .cookies-page {
+    padding: 1.5rem 0.75rem;
+  }
+
+  .cookies-page__header h1 {
+    font-size: 2rem;
+  }
+
+  .cookies-page__section h2 {
+    font-size: 1.5rem;
+  }
+
+  .cookies-page__section h3 {
+    font-size: 1.2rem;
+  }
+
+  .cookies-page__table {
+    font-size: 0.85rem;
+  }
+
+  .cookies-page__table th,
+  .cookies-page__table td {
+    padding: 0.75rem 0.5rem;
+  }
+}
+

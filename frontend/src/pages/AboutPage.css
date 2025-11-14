@@ -1,0 +1,155 @@
+.about-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.about-page__header {
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: center;
+}
+
+.about-page__header h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 0.75rem;
+}
+
+.about-page__subtitle {
+  font-size: 1.25rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.about-page__content {
+  line-height: 1.7;
+  color: #334155;
+}
+
+.about-page__section {
+  margin-bottom: 3rem;
+}
+
+.about-page__section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 1.25rem;
+  margin-top: 2rem;
+}
+
+.about-page__section:first-of-type h2 {
+  margin-top: 0;
+}
+
+.about-page__section p {
+  margin-bottom: 1rem;
+}
+
+.about-page__section ul {
+  margin: 1.25rem 0;
+  padding-left: 1.5rem;
+}
+
+.about-page__section li {
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+}
+
+.about-page__section li strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.about-page__github-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.about-page__github-box p {
+  margin-bottom: 1rem;
+}
+
+.about-page__github-box p:last-child {
+  margin-bottom: 0;
+}
+
+.about-page__note {
+  font-size: 0.9rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+.about-page__info-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.about-page__info-box p {
+  margin-bottom: 1rem;
+}
+
+.about-page__info-box p:last-child {
+  margin-bottom: 0;
+}
+
+.about-page__section--highlight {
+  background: #fef3c7;
+  border-left: 4px solid #f59e0b;
+  padding: 1.5rem;
+  margin: 2rem 0;
+  border-radius: 0.5rem;
+}
+
+.about-page__section--highlight h2 {
+  color: #92400e;
+  margin-top: 0;
+}
+
+.about-page__section--highlight p,
+.about-page__section--highlight li {
+  color: #78350f;
+}
+
+.about-page__link {
+  color: #0ea5e9;
+  text-decoration: underline;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.about-page__link:hover {
+  color: #0284c7;
+}
+
+@media (max-width: 768px) {
+  .about-page {
+    padding: 1.5rem 0.75rem;
+  }
+
+  .about-page__header h1 {
+    font-size: 2rem;
+  }
+
+  .about-page__subtitle {
+    font-size: 1.1rem;
+  }
+
+  .about-page__section h2 {
+    font-size: 1.5rem;
+  }
+
+  .about-page__section {
+    margin-bottom: 2rem;
+  }
+}
+

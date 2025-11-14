@@ -1,0 +1,86 @@
+.mentions-legales-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.mentions-legales-page__header {
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.mentions-legales-page__header h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.mentions-legales-page__last-update {
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.mentions-legales-page__content {
+  line-height: 1.7;
+  color: #334155;
+}
+
+.mentions-legales-page__section {
+  margin-bottom: 2.5rem;
+}
+
+.mentions-legales-page__section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 1rem;
+  margin-top: 2rem;
+}
+
+.mentions-legales-page__section p {
+  margin-bottom: 1rem;
+}
+
+.mentions-legales-page__info-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.mentions-legales-page__info-box p {
+  margin-bottom: 1.25rem;
+}
+
+.mentions-legales-page__info-box p:last-child {
+  margin-bottom: 0;
+}
+
+.mentions-legales-page__link {
+  color: #0ea5e9;
+  text-decoration: underline;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.mentions-legales-page__link:hover {
+  color: #0284c7;
+}
+
+@media (max-width: 768px) {
+  .mentions-legales-page {
+    padding: 1.5rem 0.75rem;
+  }
+
+  .mentions-legales-page__header h1 {
+    font-size: 2rem;
+  }
+
+  .mentions-legales-page__section h2 {
+    font-size: 1.5rem;
+  }
+}
+

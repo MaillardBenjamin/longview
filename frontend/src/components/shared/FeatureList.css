@@ -1,0 +1,33 @@
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.features__item {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 16px 30px rgba(148, 163, 184, 0.2);
+}
+
+.features__item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 36px rgba(14, 165, 233, 0.2);
+}
+
+.features__item h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: #0f172a;
+}
+
+.features__item p {
+  color: #475569;
+  line-height: 1.6;
+}
+
+
