@@ -85,10 +85,12 @@ def simulate_monte_carlo(payload: MonteCarloInput) -> MonteCarloResult:
     monthly_paths: List[List[float]] = []  # Évolution mensuelle de chaque tirage
     contribution_path: List[float] | None = None  # Chemin de référence des contributions
 
-    batch_size = payload.batch_size
-    max_iterations = payload.max_iterations
-    confidence_level = payload.confidence_level
-    tolerance_ratio = payload.tolerance_ratio
+    # Récupération des paramètres depuis market_assumptions ou valeurs par défaut
+    market = payload.market_assumptions
+    batch_size = getattr(market, "batch_size", None) or payload.batch_size
+    max_iterations = getattr(market, "max_iterations", None) or payload.max_iterations
+    confidence_level = getattr(market, "confidence_level", None) or payload.confidence_level
+    tolerance_ratio = getattr(market, "tolerance_ratio", None) or payload.tolerance_ratio
 
     # Exécution des tirages par lots jusqu'à atteindre la confiance ou la limite
     iterations = 0
@@ -107,7 +109,8 @@ def simulate_monte_carlo(payload: MonteCarloInput) -> MonteCarloResult:
         # On vérifie la confiance seulement après un lot complet
         if iterations < batch_size:
             continue
-        if check_confidence_reached(results, confidence_level, tolerance_ratio):
+        confidence_ok, _, _ = check_confidence_reached(results, confidence_level, tolerance_ratio)
+        if confidence_ok:
             break
 
     # Calcul des statistiques sur les résultats
@@ -124,13 +127,18 @@ def simulate_monte_carlo(payload: MonteCarloInput) -> MonteCarloResult:
         contribution_path,
     )
 
+    # Calcul final de la confiance et de la marge d'erreur
+    confidence_ok, error_margin, error_margin_ratio = check_confidence_reached(
+        sorted_results, confidence_level, tolerance_ratio
+    )
+
     return MonteCarloResult(
         iterations=len(sorted_results),
         confidence_level=confidence_level,
         tolerance_ratio=tolerance_ratio,
-        confidence_reached=check_confidence_reached(
-            sorted_results, confidence_level, tolerance_ratio
-        ),
+        confidence_reached=confidence_ok,
+        error_margin=error_margin,
+        error_margin_ratio=error_margin_ratio,
         mean_final_capital=mean_val,
         median_final_capital=percentile_sorted(0.5),
         percentile_10=percentile_sorted(0.1),

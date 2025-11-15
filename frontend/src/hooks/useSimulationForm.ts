@@ -143,6 +143,11 @@ const initialFormState: SimulationInput = {
       crypto: { equities: 0.4, bonds: 0.1, livrets: -0.05, crypto: 1, other: 0.5 },
       other: { equities: 0.6, bonds: 0.4, livrets: 0.1, crypto: 0.5, other: 1 },
     },
+    // Paramètres de simulation Monte Carlo par défaut (valeurs originales)
+    confidenceLevel: 0.9, // 90% de confiance
+    toleranceRatio: 0.01, // 1% de marge d'erreur (±1%)
+    maxIterations: 100, // 100 tirages maximum (comme avant)
+    batchSize: 500, // Lots de 500 tirages
   },
   targetMonthlyIncome: 3200,
   statePensionMonthlyIncome: Math.round(

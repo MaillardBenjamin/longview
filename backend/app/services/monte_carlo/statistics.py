@@ -55,7 +55,7 @@ def check_confidence_reached(
     values: List[float],
     confidence_level: float,
     tolerance_ratio: float,
-) -> bool:
+) -> tuple[bool, float, float]:
     """
     Vérifie si le niveau de confiance statistique est atteint.
 
@@ -68,12 +68,16 @@ def check_confidence_reached(
         tolerance_ratio: Ratio de tolérance (ex: 0.05 pour 5% de marge)
 
     Returns:
-        True si le niveau de confiance est atteint, False sinon
+        Tuple contenant :
+        - True si le niveau de confiance est atteint, False sinon
+        - La marge d'erreur absolue (en euros)
+        - Le ratio de marge d'erreur (en pourcentage de la moyenne)
     """
     n = len(values)
-    # Nécessite au moins 200 échantillons pour une estimation fiable
-    if n < 200:
-        return False
+    # Nécessite au moins 50 échantillons pour une estimation fiable (ajusté pour permettre 100 tirages)
+    if n < 50:
+        # Retourne une très grande valeur au lieu de inf pour la compatibilité JSON
+        return False, 1e10, 1.0  # 1e10 euros et 100% de ratio
 
     import statistics
 
@@ -82,18 +86,26 @@ def check_confidence_reached(
 
     # Si la moyenne est nulle, on vérifie que l'écart-type est aussi nul
     if mean_val == 0:
-        return stdev_val == 0
+        # Si l'écart-type est non nul, la marge d'erreur relative est indéfinie (100%)
+        return stdev_val == 0, stdev_val, 1.0 if stdev_val != 0 else 0.0
 
     z_score = get_z_value(confidence_level)
     if z_score is None:
-        return False
+        # Retourne une très grande valeur au lieu de inf pour la compatibilité JSON
+        return False, 1e10, 1.0  # 1e10 euros et 100% de ratio
 
     # Calcul de la marge d'erreur avec l'erreur standard
     standard_error = stdev_val / math.sqrt(n)
     margin = z_score * standard_error
 
+    # Calcul du ratio de marge d'erreur (en pourcentage de la moyenne)
+    # Si la moyenne est nulle, on retourne 100% (1.0) pour indiquer que c'est indéfini
+    margin_ratio = (margin / abs(mean_val)) if mean_val != 0 else 1.0
+
     # La marge doit être inférieure ou égale à la tolérance relative
-    return margin <= abs(mean_val) * tolerance_ratio
+    confidence_ok = margin <= abs(mean_val) * tolerance_ratio
+
+    return confidence_ok, margin, margin_ratio
 
 
 def get_z_value(confidence_level: float) -> float | None:

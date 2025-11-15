@@ -26,6 +26,11 @@ class MarketAssumptions(BaseModel):
     inflation_volatility: Optional[float] = None
     asset_classes: Dict[str, MarketAssetAssumption]
     correlations: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+    # Paramètres de simulation Monte Carlo
+    confidence_level: float = Field(default=0.9, ge=0.5, le=0.999, description="Niveau de confiance statistique (ex: 0.9 pour 90%)")
+    tolerance_ratio: float = Field(default=0.01, ge=0.001, le=0.5, description="Ratio de tolérance pour la marge d'erreur (ex: 0.01 pour 1%)")
+    max_iterations: int = Field(default=100, ge=100, description="Nombre maximum d'itérations de simulation")
+    batch_size: int = Field(default=500, ge=50, description="Taille des lots de tirages pour vérifier la confiance")
 
 
 class AdultProfile(BaseModel):
@@ -100,8 +105,8 @@ class CapitalizationResult(BaseModel):
 class MonteCarloInput(CapitalizationInput):
     confidence_level: float = Field(default=0.9, ge=0.5, le=0.999)
     tolerance_ratio: float = Field(default=0.05, ge=0.001, le=0.5)
-    max_iterations: int = Field(default=20000, ge=100)
-    batch_size: int = Field(default=500, ge=50)
+    max_iterations: int = Field(default=20000, ge=10)  # Minimum réduit à 10 pour l'optimisation rapide
+    batch_size: int = Field(default=500, ge=10)  # Minimum réduit à 10 pour l'optimisation rapide
 
 
 class MonteCarloPercentilePoint(BaseModel):
@@ -120,6 +125,8 @@ class MonteCarloResult(BaseModel):
     confidence_level: float
     tolerance_ratio: float
     confidence_reached: bool
+    error_margin: float = Field(default=0.0, description="Marge d'erreur absolue (en euros)")
+    error_margin_ratio: float = Field(default=0.0, description="Ratio de marge d'erreur (en pourcentage de la moyenne)")
     mean_final_capital: float
     median_final_capital: float
     percentile_10: float
@@ -162,6 +169,8 @@ class RetirementMonteCarloResult(BaseModel):
     confidence_level: float
     tolerance_ratio: float
     confidence_reached: bool
+    error_margin: float = Field(default=0.0, description="Marge d'erreur absolue (en euros)")
+    error_margin_ratio: float = Field(default=0.0, description="Ratio de marge d'erreur (en pourcentage de la moyenne)")
     mean_final_capital: float
     median_final_capital: float
     percentile_10: float

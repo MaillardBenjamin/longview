@@ -1,0 +1,245 @@
+/**
+ * Composant pour afficher les itérations d'optimisation sous forme de graphique.
+ * 
+ * Affiche l'évolution du facteur d'échelle, de l'épargne mensuelle et du capital final
+ * au fil des itérations de l'algorithme d'optimisation.
+ */
+
+import { useMemo } from "react";
+import ReactECharts from "echarts-for-react";
+import { Box, Card, CardContent, Typography } from "@mui/material";
+import type { OptimizationStep } from "@/types/simulation";
+
+interface OptimizationIterationsChartProps {
+  steps: OptimizationStep[];
+}
+
+function formatCurrency(value: number, fractionDigits = 0) {
+  return value.toLocaleString("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
+export function OptimizationIterationsChart({ steps }: OptimizationIterationsChartProps) {
+  const chartOption = useMemo(() => {
+    if (!steps || steps.length === 0) {
+      return null;
+    }
+
+    // Préparer les données pour le graphique
+    const iterations = steps.map((step) => step.iteration);
+    const scales = steps.map((step) => step.scale);
+    const monthlySavings = steps.map((step) => step.monthlySavings);
+    const finalCapitals = steps.map((step) => step.finalCapital);
+    const effectiveFinalCapitals = steps.map((step) => step.effectiveFinalCapital);
+
+    return {
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "cross",
+        },
+        formatter: (params: any) => {
+          const index = params?.[0]?.dataIndex ?? 0;
+          const step = steps[index];
+          if (!step) {
+            return "";
+          }
+
+          const lines = [
+            `<strong>Itération ${step.iteration}</strong>`,
+            `Facteur d'échelle: ${step.scale.toFixed(4)}`,
+            `Épargne mensuelle: ${formatCurrency(step.monthlySavings, 0)}`,
+            `Capital brut: ${formatCurrency(step.finalCapital, 0)}`,
+            `Capital effectif: ${formatCurrency(step.effectiveFinalCapital, 0)}`,
+            step.depletionMonths > 0
+              ? `${step.depletionMonths} mois manquants`
+              : "Horizon respecté",
+          ];
+
+          return lines.join("<br/>");
+        },
+      },
+      legend: {
+        data: ["Facteur d'échelle", "Épargne mensuelle", "Capital final", "Capital effectif"],
+        bottom: 0,
+      },
+      grid: {
+        left: "3%",
+        right: "4%",
+        bottom: "15%",
+        top: "10%",
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: iterations,
+        name: "Itération",
+        nameLocation: "middle",
+        nameGap: 30,
+      },
+      yAxis: [
+        {
+          type: "value",
+          name: "Facteur / Épargne (€)",
+          position: "left",
+          axisLabel: {
+            formatter: (value: number) => {
+              // Formatter pour le facteur d'échelle (petites valeurs) ou l'épargne (grandes valeurs)
+              if (value < 10) {
+                return value.toFixed(2);
+              }
+              return formatCurrency(value as number);
+            },
+          },
+        },
+        {
+          type: "value",
+          name: "Capital (€)",
+          position: "right",
+          axisLabel: {
+            formatter: (value: number) => formatCurrency(value as number),
+          },
+        },
+      ],
+      series: [
+        {
+          name: "Facteur d'échelle",
+          type: "line",
+          smooth: true,
+          showSymbol: true,
+          symbol: "circle",
+          symbolSize: 6,
+          lineStyle: {
+            width: 2,
+            color: "#0ea5e9",
+          },
+          itemStyle: {
+            color: "#0ea5e9",
+          },
+          data: scales,
+          yAxisIndex: 0,
+        },
+        {
+          name: "Épargne mensuelle",
+          type: "line",
+          smooth: true,
+          showSymbol: true,
+          symbol: "circle",
+          symbolSize: 6,
+          lineStyle: {
+            width: 2,
+            color: "#10b981",
+            type: "dashed",
+          },
+          itemStyle: {
+            color: "#10b981",
+          },
+          data: monthlySavings,
+          yAxisIndex: 0,
+        },
+        {
+          name: "Capital final",
+          type: "line",
+          smooth: true,
+          showSymbol: true,
+          symbol: "circle",
+          symbolSize: 6,
+          lineStyle: {
+            width: 2,
+            color: "#2563eb",
+          },
+          itemStyle: {
+            color: "#2563eb",
+          },
+          data: finalCapitals,
+          yAxisIndex: 1,
+        },
+        {
+          name: "Capital effectif",
+          type: "line",
+          smooth: true,
+          showSymbol: true,
+          symbol: "circle",
+          symbolSize: 6,
+          lineStyle: {
+            width: 2,
+            color: "#f97316",
+            type: "dashed",
+          },
+          itemStyle: {
+            color: "#f97316",
+          },
+          data: effectiveFinalCapitals,
+          yAxisIndex: 1,
+        },
+      ],
+    };
+  }, [steps]);
+
+  if (!steps || steps.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card
+      sx={{
+        background: "rgba(255, 255, 255, 0.92)",
+        borderRadius: "1.25rem",
+        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
+        border: "1px solid rgba(148, 163, 184, 0.2)",
+      }}
+    >
+      <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+        <Typography
+          variant="h5"
+          component="h2"
+          gutterBottom
+          sx={{
+            fontSize: { xs: "1.5rem", md: "1.75rem" },
+            fontWeight: 700,
+            color: "#0f172a",
+            mb: 0.5,
+          }}
+        >
+          Itérations de l&apos;optimisation
+        </Typography>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{
+            mb: 3,
+            fontSize: "0.95rem",
+            lineHeight: 1.5,
+            color: "#475569",
+          }}
+        >
+          Évolution du facteur d&apos;échelle, de l&apos;épargne mensuelle et du capital final au fil des itérations
+          de l&apos;algorithme de recherche par dichotomie.
+        </Typography>
+        {chartOption ? (
+          <Box
+            sx={{
+              width: "100%",
+              height: { xs: "320px", md: "400px" },
+              mt: 2,
+              borderRadius: "1rem",
+              overflow: "hidden",
+            }}
+          >
+            <ReactECharts option={chartOption} style={{ width: "100%", height: "100%" }} />
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
+            Aucune donnée d&apos;itération disponible.
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+

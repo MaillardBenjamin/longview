@@ -3,8 +3,12 @@ import { useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
 import ReactECharts from "echarts-for-react";
+import { Box, Card, CardContent, Container, Typography } from "@mui/material";
+import GridLegacy from "@mui/material/GridLegacy";
 import { useAuth } from "@/hooks/useAuth";
 import { listSimulations, simulateMonteCarlo } from "@/services/simulations";
+import { OptimizationIterationsChart } from "@/components/results/OptimizationIterationsChart";
+import { InvestmentAllocationCharts } from "@/components/results/InvestmentAllocationCharts";
 import type {
   AdditionalIncome,
   AdultProfile,
@@ -22,7 +26,6 @@ import type {
   SpendingPhase,
   SavingsPhase,
 } from "@/types/simulation";
-import "./SimulationResultPage.css";
 
 interface LocationState {
   simulation: Simulation | null;
@@ -126,10 +129,18 @@ const storedState = useMemo<LocationState | null>(() => {
 
   if (!hasSimulationData) {
     return (
-      <div className="results results--empty">
-        <h1>Aucune simulation disponible</h1>
-        <p>Commencez par renseigner vos informations pour projeter votre retraite.</p>
-      </div>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Card>
+          <CardContent sx={{ textAlign: "center", py: 6 }}>
+            <Typography variant="h4" component="h1" gutterBottom>
+              Aucune simulation disponible
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Commencez par renseigner vos informations pour projeter votre retraite.
+            </Typography>
+          </CardContent>
+        </Card>
+      </Container>
     );
   }
   const getSimulationValue = <T,>(camel: string, snake: string): T | undefined => {
@@ -334,84 +345,275 @@ const marketAssumptions =
     monteCarloResult?.medianFinalCapital ?? result?.projectedCapitalAtRetirement ?? 0;
 
   return (
-    <div className="results">
-      <header>
-        <h1>{headerTitle}</h1>
-        <p>
-          Visualisez l’équilibre entre vos capacités d’épargne, les revenus attendus et le capital nécessaire pour
+    <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+      <Box sx={{ mb: { xs: 3, md: 5 } }}>
+        <Typography
+          variant="h3"
+          component="h1"
+          gutterBottom
+          sx={{
+            fontSize: { xs: "2rem", md: "2.25rem" },
+            fontWeight: 700,
+            color: "#0f172a",
+            mb: 1,
+          }}
+        >
+          {headerTitle}
+        </Typography>
+        <Typography
+          variant="body1"
+          color="text.secondary"
+          sx={{
+            maxWidth: "640px",
+            lineHeight: 1.6,
+            fontSize: { xs: "0.95rem", md: "1rem" },
+          }}
+        >
+          Visualisez l'équilibre entre vos capacités d'épargne, les revenus attendus et le capital nécessaire pour
           maintenir votre niveau de vie.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
-      <section className="results__grid">
+      <GridLegacy container spacing={{ xs: 2, md: 3 }} sx={{ mb: { xs: 3, md: 5 } }}>
         {(result || monteCarloResult || retirementMonteCarloResult) ? (
           <>
-            <article className="results__card results__card--primary">
-              <h2>Épargne minimum</h2>
-              <p className="results__value">{formatCurrency(recommendedSavings)}</p>
-              <p className="results__note">
-                par mois jusqu'à {primaryRetirementAge ?? "—"} ans
-                {typeof optimizationScale === "number"
-                  ? ` · facteur ${optimizationScale.toFixed(2)}`
-                  : ""}
-                {typeof optimizationResidualError === "number" && optimizationResidualError !== 0 && (
-                  <>
-                    {" "}
-                    · écart résiduel {formatCurrency(optimizationResidualError, 0)}
-                  </>
-                )}
-                {typeof optimizationResidualErrorRatio === "number" && optimizationResidualErrorRatio !== 0 && (
-                  <>
-                    {" "}
-                    ({(optimizationResidualErrorRatio * 100).toFixed(2)} %)
-                  </>
-                )}
-              </p>
-              {typeof minimumCapitalAtRetirement === "number" && minimumCapitalAtRetirement > 0 && (
-                <p className="results__note" style={{ marginTop: "0.5rem", fontSize: "0.9rem" }}>
-                  Capital minimum à la retraite : <strong>{formatCurrency(minimumCapitalAtRetirement)}</strong>
-                </p>
-              )}
-            </article>
+            <GridLegacy item xs={12} sm={6} md={4}>
+              <Card
+                sx={{
+                  background: "linear-gradient(135deg, #0f172a, #1e293b)",
+                  color: "#f8fafc",
+                  borderRadius: "1.25rem",
+                  boxShadow: "0 18px 34px rgba(148, 163, 184, 0.18)",
+                  border: "1px solid rgba(148, 163, 184, 0.1)",
+                  transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  "&:hover": {
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 22px 40px rgba(148, 163, 184, 0.25)",
+                  },
+                }}
+              >
+                <CardContent sx={{ p: { xs: 2, md: 2.5 }, flex: 1, display: "flex", flexDirection: "column" }}>
+                  <Typography
+                    variant="h6"
+                    component="h2"
+                    gutterBottom
+                    sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600 }}
+                  >
+                    Épargne minimum
+                  </Typography>
+                  <Typography
+                    variant="h4"
+                    component="p"
+                    sx={{
+                      fontWeight: 700,
+                      mb: 1.5,
+                      fontSize: { xs: "1.75rem", md: "2rem" },
+                      flex: 1,
+                    }}
+                  >
+                    {formatCurrency(recommendedSavings)}
+                  </Typography>
+                  <Box sx={{ mt: "auto" }}>
+                    <Typography variant="body2" sx={{ opacity: 0.85, mb: 1, fontSize: "0.875rem" }}>
+                      par mois jusqu'à {primaryRetirementAge ?? "—"} ans
+                      {typeof optimizationScale === "number"
+                        ? ` · facteur ${optimizationScale.toFixed(2)}`
+                        : ""}
+                      {typeof optimizationResidualError === "number" && optimizationResidualError !== 0 && (
+                        <>
+                          {" "}
+                          · écart résiduel {formatCurrency(optimizationResidualError, 0)}
+                        </>
+                      )}
+                      {typeof optimizationResidualErrorRatio === "number" && optimizationResidualErrorRatio !== 0 && (
+                        <>
+                          {" "}
+                          ({(optimizationResidualErrorRatio * 100).toFixed(2)} %)
+                        </>
+                      )}
+                    </Typography>
+                    {typeof minimumCapitalAtRetirement === "number" && minimumCapitalAtRetirement > 0 && (
+                      <Typography variant="body2" sx={{ opacity: 0.85, mt: 1.5, fontSize: "0.875rem" }}>
+                        Capital minimum à la retraite : <strong>{formatCurrency(minimumCapitalAtRetirement)}</strong>
+                      </Typography>
+                    )}
+                  </Box>
+                </CardContent>
+              </Card>
+            </GridLegacy>
 
-            <article className="results__card">
-              <h3>Capital estimé à la retraite</h3>
-              <p className="results__value-sm">{formatCurrency(capitalAtRetirement)}</p>
-              {monteCarloResult && (
-                <p className="results__note">Médiane de la simulation Monte Carlo</p>
-              )}
-            </article>
+            <GridLegacy item xs={12} sm={6} md={4}>
+              <Card
+                sx={{
+                  background: "rgba(255, 255, 255, 0.88)",
+                  borderRadius: "1.25rem",
+                  boxShadow: "0 18px 34px rgba(148, 163, 184, 0.18)",
+                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  "&:hover": {
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 22px 40px rgba(148, 163, 184, 0.25)",
+                  },
+                }}
+              >
+                <CardContent sx={{ p: { xs: 2, md: 2.5 }, flex: 1, display: "flex", flexDirection: "column" }}>
+                  <Typography
+                    variant="h6"
+                    component="h3"
+                    gutterBottom
+                    sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: "#0f172a" }}
+                  >
+                    Capital estimé à la retraite
+                  </Typography>
+                  <Typography
+                    variant="h4"
+                    component="p"
+                    sx={{
+                      fontWeight: 700,
+                      mb: 1,
+                      fontSize: { xs: "1.75rem", md: "2rem" },
+                      color: "#0f172a",
+                      flex: 1,
+                    }}
+                  >
+                    {formatCurrency(capitalAtRetirement)}
+                  </Typography>
+                  {monteCarloResult && (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.875rem", mt: "auto" }}>
+                      Médiane de la simulation Monte Carlo
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            </GridLegacy>
 
-            <article className="results__card">
-              <h3>Reste à {primaryLifeExpectancy ?? "—"} ans</h3>
-              <p className="results__value-sm">
-                {formatCurrency(
-                  result?.projectedCapitalAtLifeExpectancy ??
-                    retirementMonteCarloResult?.median.medianFinalCapital ??
-                    0,
-                )}
-              </p>
-              {retirementMonteCarloResult && (
-                <p className="results__note">
-                  Médiane Monte Carlo: {formatCurrency(retirementMonteCarloResult.median.medianFinalCapital)}
-                </p>
-              )}
-            </article>
+            <GridLegacy item xs={12} sm={6} md={4}>
+              <Card
+                sx={{
+                  background: "rgba(255, 255, 255, 0.88)",
+                  borderRadius: "1.25rem",
+                  boxShadow: "0 18px 34px rgba(148, 163, 184, 0.18)",
+                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  "&:hover": {
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 22px 40px rgba(148, 163, 184, 0.25)",
+                  },
+                }}
+              >
+                <CardContent sx={{ p: { xs: 2, md: 2.5 }, flex: 1, display: "flex", flexDirection: "column" }}>
+                  <Typography
+                    variant="h6"
+                    component="h3"
+                    gutterBottom
+                    sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: "#0f172a" }}
+                  >
+                    Reste à {primaryLifeExpectancy ?? "—"} ans
+                  </Typography>
+                  <Typography
+                    variant="h4"
+                    component="p"
+                    sx={{
+                      fontWeight: 700,
+                      mb: 1,
+                      fontSize: { xs: "1.75rem", md: "2rem" },
+                      color: "#0f172a",
+                      flex: 1,
+                    }}
+                  >
+                    {formatCurrency(
+                      result?.projectedCapitalAtLifeExpectancy ??
+                        retirementMonteCarloResult?.median.medianFinalCapital ??
+                        0,
+                    )}
+                  </Typography>
+                  {retirementMonteCarloResult && (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.875rem", mt: "auto" }}>
+                      Médiane Monte Carlo: {formatCurrency(retirementMonteCarloResult.median.medianFinalCapital)}
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            </GridLegacy>
 
             {result && (
-              <article className="results__card">
-                <h3>Probabilité de réussite</h3>
-                <p className="results__value-sm">{Math.round(result.successProbability)}%</p>
-              </article>
+              <GridLegacy item xs={12} sm={6} md={4}>
+                <Card
+                  sx={{
+                    background: "rgba(255, 255, 255, 0.88)",
+                    borderRadius: "1.25rem",
+                    boxShadow: "0 18px 34px rgba(148, 163, 184, 0.18)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    "&:hover": {
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 22px 40px rgba(148, 163, 184, 0.25)",
+                    },
+                  }}
+                >
+                  <CardContent sx={{ p: { xs: 2, md: 2.5 }, flex: 1, display: "flex", flexDirection: "column" }}>
+                    <Typography
+                      variant="h6"
+                      component="h3"
+                      gutterBottom
+                      sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: "#0f172a" }}
+                    >
+                      Probabilité de réussite
+                    </Typography>
+                    <Typography
+                      variant="h4"
+                      component="p"
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: { xs: "1.75rem", md: "2rem" },
+                        color: "#0f172a",
+                        flex: 1,
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      {Math.round(result.successProbability)}%
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </GridLegacy>
             )}
           </>
         ) : (
-          <article className="results__card results__card--placeholder">
-            <h2>Analyse personnalisée</h2>
-            <p>Connectez-vous pour enregistrer vos projections et recevoir une analyse complète.</p>
-          </article>
+          <GridLegacy item xs={12}>
+            <Card
+              sx={{
+                textAlign: "center",
+                bgcolor: "rgba(191, 219, 254, 0.4)",
+                border: "1px dashed rgba(14, 165, 233, 0.5)",
+                borderRadius: "1.25rem",
+                boxShadow: "0 12px 28px rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ py: 4 }}>
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Analyse personnalisée
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  Connectez-vous pour enregistrer vos projections et recevoir une analyse complète.
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
         )}
-      </section>
+      </GridLegacy>
 
       <CombinedTrajectorySection
         accumulation={monteCarloResult}
@@ -429,29 +631,19 @@ const marketAssumptions =
         targetMonthlyIncome={targetMonthlyIncome ?? 0}
         pensionMonthlyIncome={statePensionMonthlyIncome ?? 0}
       />
-      {optimizationSteps.length > 0 && (
-        <section className="results__optimization">
-          <h2>Itérations de l&apos;optimisation</h2>
-          <ol className="results__optimization-list">
-            {optimizationSteps.map((step) => (
-              <li key={step.iteration}>
-                <div>
-                  Étape {step.iteration} · facteur {step.scale.toFixed(3)} → épargne{" "}
-                  {formatCurrency(step.monthlySavings, 0)} / mois
-                </div>
-                <div className="results__optimization-meta">
-                  Capital brut {formatCurrency(step.finalCapital, 0)} · Capital net{" "}
-                  {formatCurrency(step.effectiveFinalCapital, 0)} ·{" "}
-                  {step.depletionMonths > 0
-                    ? `${step.depletionMonths} mois manquants`
-                    : "Horizon respecté"}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
+      {investmentAccounts.length > 0 && monteCarloResult && (
+        <InvestmentAllocationCharts
+          accounts={investmentAccounts}
+          adults={adults}
+          medianCapitalAtRetirement={monteCarloResult.medianFinalCapital}
+        />
       )}
-    </div>
+      {optimizationSteps.length > 0 && (
+        <Box sx={{ mt: { xs: 3, md: 5 } }}>
+          <OptimizationIterationsChart steps={optimizationSteps} />
+        </Box>
+      )}
+    </Container>
   );
 }
 
@@ -588,23 +780,47 @@ function MonteCarloSection({
 
   if (isLoading) {
     return (
-      <section className="results__montecarlo">
-        <div className="results__capitalization-header">
-          <h2>Phase de capitalisation – Simulation Monte Carlo</h2>
-          <p>Exécution des tirages aléatoires…</p>
-        </div>
-      </section>
+      <Card
+        sx={{
+          background: "rgba(255, 255, 255, 0.92)",
+          borderRadius: "1.25rem",
+          boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
+          border: "1px solid rgba(148, 163, 184, 0.2)",
+          mb: { xs: 3, md: 4 },
+        }}
+      >
+        <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+            Phase de capitalisation – Simulation Monte Carlo
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Exécution des tirages aléatoires…
+          </Typography>
+        </CardContent>
+      </Card>
     );
   }
 
   if (hasError) {
     return (
-      <section className="results__montecarlo">
-        <div className="results__capitalization-header">
-          <h2>Phase de capitalisation – Simulation Monte Carlo</h2>
-          <p>La simulation Monte Carlo n&apos;a pas pu être réalisée.</p>
-        </div>
-      </section>
+      <Card
+        sx={{
+          background: "rgba(255, 255, 255, 0.92)",
+          borderRadius: "1.25rem",
+          boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
+          border: "1px solid rgba(148, 163, 184, 0.2)",
+          mb: { xs: 3, md: 4 },
+        }}
+      >
+        <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+            Phase de capitalisation – Simulation Monte Carlo
+          </Typography>
+          <Typography variant="body2" color="error">
+            La simulation Monte Carlo n&apos;a pas pu être réalisée.
+          </Typography>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -613,52 +829,145 @@ function MonteCarloSection({
   }
 
   return (
-    <section className="results__montecarlo">
-      <div className="results__capitalization-header">
-        <h2>Phase de capitalisation – Simulation Monte Carlo</h2>
-        <p>
-          {result.iterations.toLocaleString("fr-FR")}&nbsp;tirages · confiance {Math.round(result.confidenceLevel * 100)}% · marge ±
-          {Math.round(result.toleranceRatio * 100)}%
-        </p>
-      </div>
-      <p className="results__detail-note">
-        La courbe médiane représente le percentile 50 de la distribution finale, tandis que la carte « Moyenne des
-        tirages » affiche la moyenne arithmétique. Les tirages sont exécutés par lots de 500 jusqu&apos;à atteindre la
-        confiance cible (ou la limite maximale si la tolérance n&apos;est pas atteinte).
-      </p>
+    <Card
+      sx={{
+        background: "rgba(255, 255, 255, 0.92)",
+        borderRadius: "1.25rem",
+        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
+        border: "1px solid rgba(148, 163, 184, 0.2)",
+        mb: { xs: 3, md: 4 },
+      }}
+    >
+      <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+            Phase de capitalisation – Simulation Monte Carlo
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {result.iterations.toLocaleString("fr-FR")}&nbsp;tirages · confiance {Math.round(result.confidenceLevel * 100)}% · marge ±
+            {Math.round(result.toleranceRatio * 100)}%
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+            La courbe médiane représente le percentile 50 de la distribution finale, tandis que la carte « Moyenne des
+            tirages » affiche la moyenne arithmétique. Les tirages sont exécutés par lots de 500 jusqu&apos;à atteindre la
+            confiance cible (ou la limite maximale si la tolérance n&apos;est pas atteinte).
+          </Typography>
+        </Box>
 
-      {chartOption ? (
-        <div className="results__montecarlo-chart">
-          <ReactECharts option={chartOption} style={{ width: "100%", height: "320px" }} />
-        </div>
-      ) : (
-        <p className="results__capitalization-empty">Aucune série Monte Carlo disponible pour l&apos;instant.</p>
-      )}
+        {chartOption ? (
+          <Box
+            sx={{
+              width: "100%",
+              height: { xs: "300px", md: "320px" },
+              mb: 3,
+              borderRadius: "1rem",
+              overflow: "hidden",
+            }}
+          >
+            <ReactECharts option={chartOption} style={{ width: "100%", height: "100%" }} />
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
+            Aucune série Monte Carlo disponible pour l&apos;instant.
+          </Typography>
+        )}
 
-      <div className="results__montecarlo-grid">
-        <article className="results__card">
-          <h3>Capital pessimiste (10%)</h3>
-          <p className="results__value-sm">{formatCurrency(result.percentile10, 0)}</p>
-        </article>
-        <article className="results__card">
-          <h3>Capital médian</h3>
-          <p className="results__value-sm">{formatCurrency(result.percentile50, 0)}</p>
-        </article>
-        <article className="results__card">
-          <h3>Capital optimiste (90%)</h3>
-          <p className="results__value-sm">{formatCurrency(result.percentile90, 0)}</p>
-        </article>
-        <article className="results__card">
-          <h3>Moyenne des tirages</h3>
-          <p className="results__value-sm">{formatCurrency(result.meanFinalCapital, 0)}</p>
-          {!result.confidenceReached && (
-            <span className="results__detail-note">
-              Confiance cible non atteinte (élargir les tirages)
-            </span>
-          )}
-        </article>
-      </div>
-    </section>
+        <GridLegacy container spacing={{ xs: 2, md: 2.5 }}>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Capital pessimiste (10%)
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                  {formatCurrency(result.percentile10, 0)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Capital médian
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                  {formatCurrency(result.percentile50, 0)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Capital optimiste (90%)
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                  {formatCurrency(result.percentile90, 0)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Moyenne des tirages
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                  {formatCurrency(result.meanFinalCapital, 0)}
+                </Typography>
+                {!result.confidenceReached && (
+                  <Typography variant="caption" color="warning.main" sx={{ display: "block", mt: 0.5 }}>
+                    ⚠️ La précision statistique n&apos;a pas été atteinte. Les résultats peuvent varier davantage.
+                    {typeof result.errorMargin === "number" && !isNaN(result.errorMargin) && (
+                      <>
+                        {" "}
+                        Marge d&apos;erreur : {formatCurrency(result.errorMargin, 0)}
+                        {typeof result.errorMarginRatio === "number" &&
+                          !isNaN(result.errorMarginRatio) &&
+                          ` (${(result.errorMarginRatio * 100).toFixed(2)}%)`}
+                      </>
+                    )}
+                    {" "}
+                    Augmentez le nombre maximum d&apos;itérations pour améliorer la précision.
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </GridLegacy>
+        </GridLegacy>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -738,6 +1047,9 @@ function CombinedTrajectorySection({
 
   const hasData = combinedPoints.length > 0;
 
+  // Déterminer l'index de transition entre capitalisation et retraite
+  const retirementStartIndex = accumulation?.monthlyPercentiles?.length ?? 0;
+
   const chartOption = useMemo(() => {
     if (!hasData) {
       return null;
@@ -753,8 +1065,10 @@ function CombinedTrajectorySection({
             return "";
           }
 
+          const phase = index < retirementStartIndex ? "Phase de capitalisation" : "Phase de retraite";
           return [
             `<strong>${point.label}</strong>`,
+            `<em style="color: #64748b;">${phase}</em>`,
             `Scénario pessimiste: ${formatCurrency(point.pessimistic, 0)}`,
             `Scénario médian: ${formatCurrency(point.median, 0)}`,
             `Scénario optimiste: ${formatCurrency(point.optimistic, 0)}`,
@@ -769,6 +1083,7 @@ function CombinedTrajectorySection({
         left: "3%",
         right: "4%",
         bottom: "12%",
+        top: "8%",
         containLabel: true,
       },
       xAxis: {
@@ -797,6 +1112,66 @@ function CombinedTrajectorySection({
             color: "#fca5a5",
           },
           data: combinedPoints.map((point) => point.pessimistic),
+          markLine: {
+            silent: true,
+            symbol: "none",
+            lineStyle: {
+              type: "dashed",
+              color: "#64748b",
+              width: 2,
+            },
+            label: {
+              show: false,
+            },
+            data: retirementStartIndex > 0 ? [
+              {
+                xAxis: retirementStartIndex,
+              },
+            ] : [],
+          },
+          markArea: {
+            silent: true,
+            data: retirementStartIndex > 0 ? [
+              [
+                {
+                  name: "Capitalisation",
+                  xAxis: 0,
+                  itemStyle: {
+                    color: "rgba(59, 130, 246, 0.06)",
+                  },
+                  label: {
+                    position: "insideTopLeft",
+                    fontSize: 13,
+                    fontWeight: "bold",
+                    color: "#2563eb",
+                    offset: [10, 10],
+                  },
+                },
+                {
+                  xAxis: retirementStartIndex - 1,
+                },
+              ],
+              [
+                {
+                  name: "Retraite",
+                  xAxis: retirementStartIndex,
+                  itemStyle: {
+                    color: "rgba(16, 185, 129, 0.06)",
+                  },
+                  label: {
+                    position: "insideTopLeft",
+                    fontSize: 13,
+                    fontWeight: "bold",
+                    color: "#10b981",
+                    offset: [10, 10],
+                  },
+                },
+                {
+                  xAxis: combinedPoints.length - 1,
+                },
+              ],
+            ] : [],
+          },
         },
         {
           name: "Médian",
@@ -826,25 +1201,46 @@ function CombinedTrajectorySection({
         },
       ],
     };
-  }, [combinedPoints, hasData]);
+  }, [combinedPoints, hasData, retirementStartIndex]);
 
   if (!hasData) {
     return null;
   }
 
   return (
-    <section className="results__montecarlo">
-      <div className="results__capitalization-header">
-        <h2>Trajectoire globale (capitalisation + retraite)</h2>
-        <p>
-          Comparaison des scénarios pessimiste, médian et optimiste de capitalisation jusqu&apos;à la retraite puis de la
-          phase de retraite.
-        </p>
-      </div>
-      <div className="results__montecarlo-chart">
-        <ReactECharts option={chartOption} style={{ width: "100%", height: "320px" }} />
-      </div>
-    </section>
+    <Card
+      sx={{
+        background: "rgba(255, 255, 255, 0.92)",
+        borderRadius: "1.25rem",
+        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
+        border: "1px solid rgba(148, 163, 184, 0.2)",
+        mb: { xs: 3, md: 4 },
+      }}
+    >
+      <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+            Trajectoire globale (capitalisation + retraite)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+            Comparaison des scénarios pessimiste, médian et optimiste de capitalisation jusqu&apos;à la retraite puis de la
+            phase de retraite.
+          </Typography>
+        </Box>
+        {chartOption ? (
+          <Box
+            sx={{
+              width: "100%",
+              height: { xs: "300px", md: "320px" },
+              borderRadius: "1rem",
+              overflow: "hidden",
+            }}
+          >
+            <ReactECharts option={chartOption} style={{ width: "100%", height: "100%" }} />
+          </Box>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -978,46 +1374,133 @@ function RetirementMonteCarloSection({
   }, [results]);
 
   return (
-    <section className="results__montecarlo">
-      <div className="results__capitalization-header">
-        <h2>Phase de retraite – Simulation Monte Carlo</h2>
-        <p>
-          {durationYears !== undefined
-            ? `Durée projetée : ${durationYears.toLocaleString("fr-FR", {
-                maximumFractionDigits: 1,
-              })} ans · `
-            : ""}
-          Revenu cible {formatCurrency(targetMonthlyIncome)} · Pension attendue {formatCurrency(pensionMonthlyIncome)}
-        </p>
-      </div>
-      <div className="results__montecarlo-grid">
-        <article className="results__card">
-          <h3>Capital pessimiste (10%)</h3>
-          <p className="results__value-sm">{formatCurrency(results.pessimistic.medianFinalCapital, 0)}</p>
-          <p className="results__detail-note">Médiane du scénario pessimiste</p>
-        </article>
-        <article className="results__card">
-          <h3>Capital médian</h3>
-          <p className="results__value-sm">{formatCurrency(results.median.medianFinalCapital, 0)}</p>
-        </article>
-        <article className="results__card">
-          <h3>Capital optimiste (90%)</h3>
-          <p className="results__value-sm">{formatCurrency(results.optimistic.medianFinalCapital, 0)}</p>
-          <p className="results__detail-note">Médiane du scénario optimiste</p>
-        </article>
-        <article className="results__card">
-          <h3>Retraits cumulés (médian)</h3>
-          <p className="results__value-sm">{formatCurrency(cumulativeWithdrawalMedian, 0)}</p>
-        </article>
-      </div>
-      {chartOption ? (
-        <div className="results__montecarlo-chart">
-          <ReactECharts option={chartOption} style={{ width: "100%", height: "320px" }} />
-        </div>
-      ) : (
-        <p className="results__capitalization-empty">Aucune donnée de simulation retraite disponible.</p>
-      )}
-    </section>
+    <Card
+      sx={{
+        background: "rgba(255, 255, 255, 0.92)",
+        borderRadius: "1.25rem",
+        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
+        border: "1px solid rgba(148, 163, 184, 0.2)",
+        mb: { xs: 3, md: 4 },
+      }}
+    >
+      <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+            Phase de retraite – Simulation Monte Carlo
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+            {durationYears !== undefined
+              ? `Durée projetée : ${durationYears.toLocaleString("fr-FR", {
+                  maximumFractionDigits: 1,
+                })} ans · `
+              : ""}
+            Revenu cible {formatCurrency(targetMonthlyIncome)} · Pension attendue {formatCurrency(pensionMonthlyIncome)}
+          </Typography>
+        </Box>
+
+        <GridLegacy container spacing={{ xs: 2, md: 2.5 }} sx={{ mb: 3 }}>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Capital pessimiste (10%)
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a", mb: 0.5 }}>
+                  {formatCurrency(results.pessimistic.medianFinalCapital, 0)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
+                  Médiane du scénario pessimiste
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Capital médian
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                  {formatCurrency(results.median.medianFinalCapital, 0)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Capital optimiste (90%)
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a", mb: 0.5 }}>
+                  {formatCurrency(results.optimistic.medianFinalCapital, 0)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
+                  Médiane du scénario optimiste
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
+          <GridLegacy item xs={12} sm={6} md={3}>
+            <Card
+              sx={{
+                background: "rgba(255, 255, 255, 0.88)",
+                borderRadius: "1rem",
+                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
+                border: "1px solid rgba(148, 163, 184, 0.15)",
+              }}
+            >
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                  Retraits cumulés (médian)
+                </Typography>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                  {formatCurrency(cumulativeWithdrawalMedian, 0)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </GridLegacy>
+        </GridLegacy>
+
+        {chartOption ? (
+          <Box
+            sx={{
+              width: "100%",
+              height: { xs: "300px", md: "320px" },
+              borderRadius: "1rem",
+              overflow: "hidden",
+            }}
+          >
+            <ReactECharts option={chartOption} style={{ width: "100%", height: "100%" }} />
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
+            Aucune donnée de simulation retraite disponible.
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 export default SimulationResultPage;

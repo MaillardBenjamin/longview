@@ -172,6 +172,10 @@ function mapMarketAssumptionsToApi(market: SimulationInput["marketAssumptions"])
     inflation_volatility: market?.inflationVolatility,
     asset_classes: mappedAssets,
     correlations,
+    confidence_level: market?.confidenceLevel,
+    tolerance_ratio: market?.toleranceRatio,
+    max_iterations: market?.maxIterations,
+    batch_size: market?.batchSize,
   };
 }
 
@@ -184,6 +188,8 @@ function buildMonteCarloResultFromApi(data: any): MonteCarloResult {
     confidenceLevel: data.confidence_level,
     toleranceRatio: data.tolerance_ratio,
     confidenceReached: data.confidence_reached,
+    errorMargin: data.error_margin,
+    errorMarginRatio: data.error_margin_ratio,
     meanFinalCapital: data.mean_final_capital,
     medianFinalCapital: data.median_final_capital,
     percentile10: data.percentile_10,
@@ -214,6 +220,8 @@ function buildRetirementMonteCarloResultFromApi(data: any): RetirementMonteCarlo
     confidenceLevel: data.confidence_level,
     toleranceRatio: data.tolerance_ratio,
     confidenceReached: data.confidence_reached,
+    errorMargin: data.error_margin,
+    errorMarginRatio: data.error_margin_ratio,
     meanFinalCapital: data.mean_final_capital,
     medianFinalCapital: data.median_final_capital,
     percentile10: data.percentile_10,

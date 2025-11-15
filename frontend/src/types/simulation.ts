@@ -65,6 +65,11 @@ export interface MarketAssumptions {
   inflationVolatility: number;
   assetClasses: Record<AssetClassKey, AssetAssumption>;
   correlations: CorrelationMatrix;
+  // Paramètres de simulation Monte Carlo
+  confidenceLevel?: number; // Niveau de confiance statistique (ex: 0.9 pour 90%)
+  toleranceRatio?: number; // Ratio de tolérance pour la marge d'erreur (ex: 0.05 pour 5%)
+  maxIterations?: number; // Nombre maximum d'itérations de simulation
+  batchSize?: number; // Taille des lots de tirages pour vérifier la confiance
 }
 
 export type InvestmentAccountType =
@@ -128,6 +133,8 @@ export interface MonteCarloResult {
   confidenceLevel: number;
   toleranceRatio: number;
   confidenceReached: boolean;
+  errorMargin?: number; // Marge d'erreur absolue (en euros)
+  errorMarginRatio?: number; // Ratio de marge d'erreur (en pourcentage de la moyenne)
   meanFinalCapital: number;
   medianFinalCapital: number;
   percentile10: number;

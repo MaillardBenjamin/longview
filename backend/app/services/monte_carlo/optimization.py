@@ -80,15 +80,22 @@ def optimize_savings_plan(
     real_phases = payload.savings_phases
     real_accounts = payload.investment_accounts
     
+    # Récupération des paramètres depuis market_assumptions ou valeurs par défaut
+    market = payload.market_assumptions
+    confidence_level = getattr(market, "confidence_level", None) or payload.confidence_level
+    tolerance_ratio = getattr(market, "tolerance_ratio", None) or payload.tolerance_ratio
+    max_iterations_mc = getattr(market, "max_iterations", None) or max(payload.max_iterations, 100)
+    batch_size = getattr(market, "batch_size", None) or payload.batch_size
+    
     mc_input_real = MonteCarloInput(
         adults=payload.adults,
         savings_phases=real_phases,
         investment_accounts=real_accounts,
         market_assumptions=payload.market_assumptions,
-        confidence_level=payload.confidence_level,
-        tolerance_ratio=payload.tolerance_ratio,
-        max_iterations=max(payload.max_iterations, 100),
-        batch_size=payload.batch_size,
+        confidence_level=confidence_level,
+        tolerance_ratio=tolerance_ratio,
+        max_iterations=max_iterations_mc,
+        batch_size=batch_size,
     )
     
     accumulation_real = simulate_monte_carlo(mc_input_real)
@@ -151,19 +158,75 @@ def optimize_savings_plan(
             best_sufficient = result
 
     iteration_counter = -1
+    # Variables pour suivre la progression de la recherche dichotomique
+    search_range_width: float | None = None
+    initial_range_width: float | None = None
 
-    def evaluate(scale: float) -> EvaluationResult:
+    def calculate_adaptive_iterations() -> int:
+        """
+        Calcule le nombre d'itérations Monte Carlo adaptatif selon la précision de la recherche.
+        
+        Au début de la recherche (grande plage), on utilise moins d'itérations pour aller vite.
+        À mesure qu'on se rapproche de la solution (petite plage), on augmente progressivement.
+        
+        Returns:
+            Nombre d'itérations Monte Carlo à utiliser
+        """
+        nonlocal search_range_width, initial_range_width
+        
+        if search_range_width is None or initial_range_width is None:
+            # Première itération : utiliser le minimum (10 itérations pour être très rapide)
+            return 10
+        
+        # Calculer le ratio de réduction de la plage de recherche
+        reduction_ratio = search_range_width / initial_range_width
+        
+        # Au début (réduction > 50%), utiliser 10 itérations pour être très rapide
+        # Entre 50% et 25%, utiliser 10-50 itérations
+        # Entre 25% et 10%, utiliser 50-200 itérations
+        # Entre 10% et 1%, utiliser 200-500 itérations
+        # En dessous de 1%, utiliser le maximum
+        if reduction_ratio > 0.5:
+            return 10
+        elif reduction_ratio > 0.25:
+            # Interpolation linéaire entre 10 et 50
+            progress = (0.5 - reduction_ratio) / 0.25  # 0 à 1 quand reduction_ratio passe de 0.5 à 0.25
+            return int(10 + progress * 40)
+        elif reduction_ratio > 0.1:
+            # Interpolation linéaire entre 50 et 200
+            progress = (0.25 - reduction_ratio) / 0.15  # 0 à 1 quand reduction_ratio passe de 0.25 à 0.1
+            return int(50 + progress * 150)
+        elif reduction_ratio > 0.01:
+            # Interpolation linéaire entre 200 et 500
+            progress = (0.1 - reduction_ratio) / 0.09  # 0 à 1 quand reduction_ratio passe de 0.1 à 0.01
+            return int(200 + progress * 300)
+        else:
+            # Utiliser le maximum pour la précision finale
+            return max_iterations_mc
+
+    def evaluate(scale: float, mc_iterations_override: int | None = None) -> EvaluationResult:
         """
         Évalue un facteur d'échelle en exécutant les simulations complètes.
 
         Args:
             scale: Facteur d'échelle à appliquer aux épargnes
+            mc_iterations_override: Nombre d'itérations Monte Carlo à utiliser (None pour calcul adaptatif)
 
         Returns:
             Résultat de l'évaluation
         """
         nonlocal iteration_counter
         iteration_counter += 1
+
+        # Calculer le nombre d'itérations à utiliser
+        if mc_iterations_override is not None:
+            iterations_to_use = mc_iterations_override
+        else:
+            iterations_to_use = calculate_adaptive_iterations()
+
+        # Ajuster le batch_size pour être cohérent avec le nombre d'itérations
+        # Si on utilise peu d'itérations, on réduit aussi le batch_size
+        adaptive_batch_size = min(batch_size, max(10, iterations_to_use))
 
         # Mise à l'échelle des phases d'épargne et des comptes
         scaled_phases = scale_savings_phases(payload.savings_phases, scale)
@@ -175,10 +238,10 @@ def optimize_savings_plan(
             savings_phases=scaled_phases,
             investment_accounts=scaled_accounts,
             market_assumptions=payload.market_assumptions,
-            confidence_level=payload.confidence_level,
-            tolerance_ratio=payload.tolerance_ratio,
-            max_iterations=max(payload.max_iterations, 100),
-            batch_size=payload.batch_size,
+            confidence_level=confidence_level,
+            tolerance_ratio=tolerance_ratio,
+            max_iterations=iterations_to_use,
+            batch_size=adaptive_batch_size,
         )
 
         accumulation_result = simulate_monte_carlo(mc_input)
@@ -239,13 +302,15 @@ def optimize_savings_plan(
 
         logger.info(
             "Étape d'optimisation %d → facteur=%.4f, capital brut=%.2f €, "
-            "capital effectif=%.2f €, épargne mensuelle=%.2f €, épuisement=%d mois",
+            "capital effectif=%.2f €, épargne mensuelle=%.2f €, épuisement=%d mois, "
+            "MC iterations=%d",
             iteration_counter,
             scale,
             final_capital,
             effective_final_capital,
             total_savings,
             months_remaining_penalty,
+            iterations_to_use,
         )
 
         result = EvaluationResult(
@@ -301,12 +366,28 @@ def optimize_savings_plan(
             # Recherche par dichotomie entre low et high
             low_result = low
             high_result = high
+            
+            # Initialiser la largeur de l'intervalle pour le calcul adaptatif
+            # (les variables sont déjà dans la portée externe)
+            initial_range_width = high_result.scale - low_result.scale
+            search_range_width = initial_range_width
+            
+            logger.info(
+                "Démarrage de la recherche dichotomique : plage initiale [%.4f, %.4f] (largeur=%.4f)",
+                low_result.scale,
+                high_result.scale,
+                initial_range_width,
+            )
+            
             iterations_remaining = max(0, max_iterations - len(steps))
 
             for _ in range(iterations_remaining):
                 # Arrêt si la précision est suffisante
                 if high_result.scale - low_result.scale < 1e-4:
                     break
+
+                # Mettre à jour la largeur de l'intervalle pour le calcul adaptatif
+                search_range_width = high_result.scale - low_result.scale
 
                 # Test du point médian
                 mid_scale = (low_result.scale + high_result.scale) / 2
@@ -321,7 +402,18 @@ def optimize_savings_plan(
                     # Le point médian n'est pas suffisant, on augmente la borne inférieure
                     low_result = mid
 
+            # Sélectionner le meilleur candidat
             final_choice = best_sufficient or high_result
+            
+            # Réévaluer avec le maximum d'itérations pour la solution finale
+            # Cela garantit la précision maximale pour le résultat final
+            logger.info(
+                "Réévaluation finale avec %d itérations Monte Carlo pour la précision maximale (facteur=%.4f)",
+                max_iterations_mc,
+                final_choice.scale,
+            )
+            final_scale = final_choice.scale
+            final_choice = evaluate(final_scale, mc_iterations_override=max_iterations_mc)
 
     # Le capital minimum à la retraite est le capital médian atteint avec l'épargne optimale
     minimum_capital_at_retirement = final_choice.accumulation.median_final_capital
@@ -432,6 +524,13 @@ def run_retirement_scenarios(
         scaled_accounts, accumulation_result.percentile_90
     )
 
+    # Récupération des paramètres depuis market_assumptions ou valeurs par défaut
+    market = payload.market_assumptions
+    confidence_level_ret = getattr(market, "confidence_level", None) or payload.confidence_level
+    tolerance_ratio_ret = getattr(market, "tolerance_ratio", None) or payload.tolerance_ratio
+    max_iterations_ret = getattr(market, "max_iterations", None) or max(payload.max_iterations, 100)
+    batch_size_ret = getattr(market, "batch_size", None) or payload.batch_size
+    
     # Paramètres communs pour toutes les simulations de retraite
     base_kwargs = dict(
         adults=payload.adults,
@@ -440,10 +539,10 @@ def run_retirement_scenarios(
         target_monthly_income=payload.target_monthly_income,
         state_pension_monthly_income=payload.state_pension_monthly_income,
         additional_income_streams=payload.additional_income_streams,
-        confidence_level=payload.confidence_level,
-        tolerance_ratio=payload.tolerance_ratio,
-        max_iterations=max(payload.max_iterations, 100),
-        batch_size=payload.batch_size,
+        confidence_level=confidence_level_ret,
+        tolerance_ratio=tolerance_ratio_ret,
+        max_iterations=max_iterations_ret,
+        batch_size=batch_size_ret,
     )
 
     # Exécution des simulations pour chaque scénario

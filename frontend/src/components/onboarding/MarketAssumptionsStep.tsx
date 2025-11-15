@@ -168,6 +168,106 @@ export function MarketAssumptionsStep({ formData, updateFormData }: MarketAssump
       <Accordion sx={{ mt: 2 }}>
         <AccordionSummary expandIcon={<ExpandMore />}>
           <Typography variant="subtitle1" fontWeight="bold">
+            Paramètres de simulation Monte Carlo
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Configurez les paramètres de précision statistique pour les simulations Monte Carlo.
+            Augmentez le nombre d&apos;itérations ou réduisez la tolérance pour améliorer la précision.
+          </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Niveau de confiance (%)"
+                type="number"
+                value={((market?.confidenceLevel ?? 0.9) * 100).toFixed(0)}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) / 100;
+                  if (!isNaN(val) && val >= 50 && val <= 99.9) {
+                    updateFormData({
+                      marketAssumptions: {
+                        ...market!,
+                        confidenceLevel: val,
+                      },
+                    });
+                  }
+                }}
+                inputProps={{ min: 50, max: 99.9, step: 0.1 }}
+                helperText="Niveau de confiance statistique (ex: 90 pour 90%)"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Tolérance (%)"
+                type="number"
+                value={((market?.toleranceRatio ?? 0.01) * 100).toFixed(1)}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) / 100;
+                  if (!isNaN(val) && val >= 0.1 && val <= 50) {
+                    updateFormData({
+                      marketAssumptions: {
+                        ...market!,
+                        toleranceRatio: val,
+                      },
+                    });
+                  }
+                }}
+                inputProps={{ min: 0.1, max: 50, step: 0.1 }}
+                helperText="Marge d'erreur relative acceptée (ex: 5 pour 5%)"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Nombre maximum d'itérations"
+                type="number"
+                value={market?.maxIterations ?? 100}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val) && val >= 100) {
+                    updateFormData({
+                      marketAssumptions: {
+                        ...market!,
+                        maxIterations: val,
+                      },
+                    });
+                  }
+                }}
+                inputProps={{ min: 100, step: 100 }}
+                helperText="Nombre maximum de tirages Monte Carlo (minimum 100)"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Taille des lots"
+                type="number"
+                value={market?.batchSize ?? 500}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val) && val >= 50) {
+                    updateFormData({
+                      marketAssumptions: {
+                        ...market!,
+                        batchSize: val,
+                      },
+                    });
+                  }
+                }}
+                inputProps={{ min: 50, step: 50 }}
+                helperText="Nombre de tirages par lot pour vérifier la confiance (minimum 50)"
+              />
+            </Grid>
+          </Grid>
+        </AccordionDetails>
+      </Accordion>
+
+      <Accordion sx={{ mt: 2 }}>
+        <AccordionSummary expandIcon={<ExpandMore />}>
+          <Typography variant="subtitle1" fontWeight="bold">
             Matrice de corrélations
           </Typography>
         </AccordionSummary>
