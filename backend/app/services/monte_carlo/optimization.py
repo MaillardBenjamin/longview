@@ -58,27 +58,67 @@ def optimize_savings_plan(
     """
     Optimise le plan d'épargne pour atteindre un capital cible à la fin de vie.
 
-    Utilise une recherche par dichotomie pour trouver le facteur d'échelle optimal
-    des épargnes mensuelles. Pour chaque facteur testé :
-    1. Met à l'échelle les phases d'épargne et les contributions des comptes
-    2. Exécute une simulation de capitalisation
-    3. Exécute des simulations de retraite pour les scénarios pessimiste, médian et optimiste
-    4. Évalue si le capital médian dure jusqu'à l'espérance de vie
-    5. Applique une pénalité si le capital s'épuise avant l'espérance de vie
+    Nouvelle approche :
+    1. Calcule d'abord avec les versements réels (scale=1.0) pour obtenir les courbes réelles
+    2. Calcule le capital qui sera atteint à la retraite avec ces versements
+    3. Calcule le capital minimum nécessaire à la retraite pour atteindre l'objectif
+    4. Si insuffisant, calcule un versement supplémentaire minimum nécessaire
 
     Args:
         payload: Paramètres d'optimisation (profils, comptes, objectifs)
 
     Returns:
-        Résultat de l'optimisation avec le facteur recommandé et les détails
+        Résultat de l'optimisation avec les courbes réelles et l'épargne minimum supplémentaire
     """
     logger.info(
         "Démarrage de l'optimisation Monte Carlo ciblant %.2f € en fin de vie.",
         payload.target_final_capital,
     )
+    
+    # Étape 1 : Calcul avec les versements réels (scale=1.0) pour les courbes
+    logger.info("Calcul avec les versements réels (scale=1.0) pour obtenir les courbes de projection.")
+    real_phases = payload.savings_phases
+    real_accounts = payload.investment_accounts
+    
+    mc_input_real = MonteCarloInput(
+        adults=payload.adults,
+        savings_phases=real_phases,
+        investment_accounts=real_accounts,
+        market_assumptions=payload.market_assumptions,
+        confidence_level=payload.confidence_level,
+        tolerance_ratio=payload.tolerance_ratio,
+        max_iterations=max(payload.max_iterations, 100),
+        batch_size=payload.batch_size,
+    )
+    
+    accumulation_real = simulate_monte_carlo(mc_input_real)
+    retirement_real = run_retirement_scenarios(
+        payload, real_accounts, accumulation_real
+    )
+    
+    # Capital médian à la retraite avec les versements réels
+    capital_at_retirement_real = accumulation_real.median_final_capital
+    # Capital médian en fin de vie avec les versements réels
+    capital_at_end_real = retirement_real.median.median_final_capital
+    
+    logger.info(
+        "Avec les versements réels : capital à la retraite=%.2f €, capital en fin de vie=%.2f €",
+        capital_at_retirement_real,
+        capital_at_end_real,
+    )
 
+    # Étape 2 : Calculer l'épargne minimum nécessaire via l'algorithme d'optimisation complet
+    # On exécute toujours l'algorithme complet pour trouver l'épargne minimum nécessaire
+    logger.info(
+        "Calcul de l'épargne minimum nécessaire via l'algorithme d'optimisation. "
+        "Capital réel en fin de vie=%.2f € (objectif=%.2f €).",
+        capital_at_end_real,
+        payload.target_final_capital,
+    )
+    
     # Calcul de la tolérance en capital (minimum 100€ ou % du capital cible)
     tolerance_capital = max(100.0, abs(payload.target_final_capital) * payload.tolerance_ratio)
+    
     max_iterations = max(payload.max_iterations, 5)
     steps: List[OptimizationStep] = []
 
@@ -148,6 +188,8 @@ def optimize_savings_plan(
 
         # Calcul des métriques
         final_capital = retirement_results.median.median_final_capital
+        # Total des versements mensuels : uniquement les comptes d'investissement
+        # Les phases d'épargne sont indicatives et ne sont pas incluses dans l'épargne minimum
         total_savings = sum(
             account.monthly_contribution or 0.0 for account in scaled_accounts
         )
@@ -220,6 +262,17 @@ def optimize_savings_plan(
         register_candidate(result)
         return result
 
+    # Étape 3 : Calculer l'épargne minimum totale nécessaire
+    # On cherche le facteur d'échelle optimal pour atteindre l'objectif
+    # Les courbes affichées seront toujours celles avec les versements réels (scale=1.0)
+    # mais l'épargne minimum sera le montant total nécessaire
+    
+    # Calculer l'épargne mensuelle réelle totale (uniquement les comptes d'investissement)
+    # Les phases d'épargne sont indicatives et ne sont pas incluses dans l'épargne minimum
+    total_real_savings = sum(
+        account.monthly_contribution or 0.0 for account in real_accounts
+    )
+    
     # Évaluation initiale avec facteur 0 (épargnes existantes uniquement)
     low = evaluate(0.0)
     if low.sufficient:
@@ -270,21 +323,28 @@ def optimize_savings_plan(
 
             final_choice = best_sufficient or high_result
 
+    # Le capital minimum à la retraite est le capital médian atteint avec l'épargne optimale
+    minimum_capital_at_retirement = final_choice.accumulation.median_final_capital
+
     logger.info(
-        "Optimisation terminée : facteur=%.4f, capital brut=%.2f €, "
-        "capital effectif=%.2f €, épargne mensuelle=%.2f €, épuisement=%d mois",
+        "Optimisation terminée : facteur=%.4f, épargne réelle=%.2f €/mois, "
+        "épargne minimum totale=%.2f €/mois, capital minimum à la retraite=%.2f €, "
+        "capital effectif=%.2f €, épuisement=%d mois",
         final_choice.scale,
-        final_choice.final_capital,
-        final_choice.effective_final_capital,
+        total_real_savings,
         final_choice.total_savings,
+        minimum_capital_at_retirement,
+        final_choice.effective_final_capital,
         final_choice.depletion_months,
     )
 
+    # Retourner les courbes avec les versements réels (scale=1.0) et l'épargne minimum totale
     return RecommendedSavingsResult(
-        scale=final_choice.scale,
-        recommended_monthly_savings=max(0.0, final_choice.total_savings),
-        monte_carlo_result=final_choice.accumulation,
-        retirement_results=final_choice.retirement,
+        scale=1.0,  # Les courbes reflètent les versements réels
+        recommended_monthly_savings=max(0.0, final_choice.total_savings),  # Épargne minimum totale nécessaire
+        minimum_capital_at_retirement=minimum_capital_at_retirement,  # Capital minimum nécessaire à la retraite
+        monte_carlo_result=accumulation_real,  # Courbes avec versements réels
+        retirement_results=retirement_real,  # Courbes avec versements réels
         steps=steps,
         residual_error=final_choice.error,
         residual_error_ratio=(

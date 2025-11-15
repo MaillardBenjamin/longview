@@ -207,8 +207,9 @@ class SavingsOptimizationInput(BaseModel):
 class RecommendedSavingsResult(BaseModel):
     scale: float
     recommended_monthly_savings: float
-    monte_carlo_result: MonteCarloResult
-    retirement_results: RetirementScenarioResults
+    minimum_capital_at_retirement: float  # Capital minimum nécessaire à la retraite
+    monte_carlo_result: MonteCarloResult  # Courbes avec versements réels
+    retirement_results: RetirementScenarioResults  # Courbes avec versements réels
     steps: List[OptimizationStep] = Field(default_factory=list)
     residual_error: float
     residual_error_ratio: float

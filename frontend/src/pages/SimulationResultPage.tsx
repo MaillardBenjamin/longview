@@ -31,6 +31,7 @@ interface LocationState {
   monteCarloResult?: MonteCarloResult;
   retirementMonteCarloResult?: RetirementScenarioResults;
   recommendedSavings?: number;
+  minimumCapitalAtRetirement?: number;
   optimizationSteps?: OptimizationStep[];
   optimizationScale?: number;
   optimizationResidualError?: number;
@@ -115,7 +116,15 @@ const storedState = useMemo<LocationState | null>(() => {
     (simulationRecord?.results_snapshot as SimulationResult | undefined);
   const result = locationState?.result ?? resultFromSimulation ?? null;
 
-  if (!simulation && !result && !draft) {
+  // Vérifier si on a des données de simulation (soit via simulation/result, soit via draft + résultats Monte Carlo)
+  const hasSimulationData =
+    simulation ||
+    result ||
+    draft ||
+    locationState?.monteCarloResult ||
+    locationState?.retirementMonteCarloResult;
+
+  if (!hasSimulationData) {
     return (
       <div className="results results--empty">
         <h1>Aucune simulation disponible</h1>
@@ -195,6 +204,19 @@ const marketAssumptions =
   const monteCarloFromState = locationState?.monteCarloResult ?? null;
   const retirementMonteCarloFromState = locationState?.retirementMonteCarloResult ?? null;
 
+  // Debug: vérifier les données reçues
+  useEffect(() => {
+    if (locationState) {
+      console.log("LocationState reçu:", {
+        hasDraft: !!locationState.draft,
+        hasMonteCarlo: !!locationState.monteCarloResult,
+        hasRetirement: !!locationState.retirementMonteCarloResult,
+        hasRecommendedSavings: typeof locationState.recommendedSavings === "number",
+        monteCarloKeys: locationState.monteCarloResult ? Object.keys(locationState.monteCarloResult) : [],
+      });
+    }
+  }, [locationState]);
+
   const capitalizationInput = useMemo<SimulationInput | null>(() => {
     if (monteCarloFromState) {
       return null;
@@ -268,6 +290,7 @@ const marketAssumptions =
   const retirementMonteCarloResult = retirementMonteCarloFromState ?? null;
   const recommendedSavings =
     locationState?.recommendedSavings ?? result?.requiredMonthlySavings ?? 0;
+  const minimumCapitalAtRetirement = locationState?.minimumCapitalAtRetirement;
   const optimizationSteps = locationState?.optimizationSteps ?? [];
   const optimizationScale = locationState?.optimizationScale;
   const optimizationResidualError = locationState?.optimizationResidualError ?? null;
@@ -321,29 +344,34 @@ const marketAssumptions =
       </header>
 
       <section className="results__grid">
-        {result ? (
+        {(result || monteCarloResult || retirementMonteCarloResult) ? (
           <>
             <article className="results__card results__card--primary">
               <h2>Épargne minimum</h2>
               <p className="results__value">{formatCurrency(recommendedSavings)}</p>
               <p className="results__note">
-                par mois jusqu’à {primaryRetirementAge ?? "—"} ans
+                par mois jusqu'à {primaryRetirementAge ?? "—"} ans
                 {typeof optimizationScale === "number"
                   ? ` · facteur ${optimizationScale.toFixed(2)}`
                   : ""}
-                {typeof optimizationResidualError === "number" && (
+                {typeof optimizationResidualError === "number" && optimizationResidualError !== 0 && (
                   <>
                     {" "}
                     · écart résiduel {formatCurrency(optimizationResidualError, 0)}
                   </>
                 )}
-                {typeof optimizationResidualErrorRatio === "number" && (
+                {typeof optimizationResidualErrorRatio === "number" && optimizationResidualErrorRatio !== 0 && (
                   <>
                     {" "}
                     ({(optimizationResidualErrorRatio * 100).toFixed(2)} %)
                   </>
                 )}
               </p>
+              {typeof minimumCapitalAtRetirement === "number" && minimumCapitalAtRetirement > 0 && (
+                <p className="results__note" style={{ marginTop: "0.5rem", fontSize: "0.9rem" }}>
+                  Capital minimum à la retraite : <strong>{formatCurrency(minimumCapitalAtRetirement)}</strong>
+                </p>
+              )}
             </article>
 
             <article className="results__card">
@@ -356,7 +384,13 @@ const marketAssumptions =
 
             <article className="results__card">
               <h3>Reste à {primaryLifeExpectancy ?? "—"} ans</h3>
-              <p className="results__value-sm">{formatCurrency(result.projectedCapitalAtLifeExpectancy)}</p>
+              <p className="results__value-sm">
+                {formatCurrency(
+                  result?.projectedCapitalAtLifeExpectancy ??
+                    retirementMonteCarloResult?.median.medianFinalCapital ??
+                    0,
+                )}
+              </p>
               {retirementMonteCarloResult && (
                 <p className="results__note">
                   Médiane Monte Carlo: {formatCurrency(retirementMonteCarloResult.median.medianFinalCapital)}
@@ -364,10 +398,12 @@ const marketAssumptions =
               )}
             </article>
 
-            <article className="results__card">
-              <h3>Probabilité de réussite</h3>
-              <p className="results__value-sm">{Math.round(result.successProbability)}%</p>
-            </article>
+            {result && (
+              <article className="results__card">
+                <h3>Probabilité de réussite</h3>
+                <p className="results__value-sm">{Math.round(result.successProbability)}%</p>
+              </article>
+            )}
           </>
         ) : (
           <article className="results__card results__card--placeholder">

@@ -418,13 +418,23 @@ export async function optimizeSavingsPlan(
 ): Promise<{
   scale: number;
   recommendedMonthlySavings: number;
+  minimumCapitalAtRetirement: number;
   monteCarloResult: MonteCarloResult;
   retirementResults: RetirementScenarioResults;
   steps: OptimizationStep[];
   residualError: number;
   residualErrorRatio: number;
 }> {
-  const response = await apiClient.post("/simulations/recommended-savings", {
+  // Validation des paramètres requis
+  if (!simulation.adults || simulation.adults.length === 0) {
+    throw new Error("Au moins un adulte est requis pour la simulation");
+  }
+  
+  if (!simulation.marketAssumptions) {
+    throw new Error("Les hypothèses de marché sont requises");
+  }
+
+  const payload = {
     adults: mapAdultsToApi(simulation.adults),
     savings_phases: mapSavingsPhasesToApi(simulation.savingsPhases ?? []),
     investment_accounts: mapInvestmentAccountsToApi(simulation.investmentAccounts),
@@ -438,24 +448,38 @@ export async function optimizeSavingsPlan(
     max_iterations: 24,
     batch_size: 500,
     target_final_capital: 0,
+  };
+
+  // Debug: log des paramètres envoyés
+  console.log("Paramètres envoyés à l'API d'optimisation:", {
+    adultsCount: payload.adults.length,
+    savingsPhasesCount: payload.savings_phases.length,
+    investmentAccountsCount: payload.investment_accounts.length,
+    spendingProfileCount: payload.spending_profile.length,
+    targetMonthlyIncome: payload.target_monthly_income,
+    statePensionMonthlyIncome: payload.state_pension_monthly_income,
+    additionalIncomeStreamsCount: payload.additional_income_streams?.length ?? 0,
   });
 
+  const response = await apiClient.post("/simulations/recommended-savings", payload);
+
   const data = response.data;
-  return {
-    scale: data.scale,
-    recommendedMonthlySavings: data.recommended_monthly_savings,
-    monteCarloResult: buildMonteCarloResultFromApi(data.monte_carlo_result),
-    retirementResults: buildRetirementScenarioResultsFromApi(data.retirement_results),
-    steps: (data.steps ?? []).map((step: any) => ({
-      iteration: step.iteration,
-      scale: step.scale,
-      monthlySavings: step.monthly_savings,
-      finalCapital: step.final_capital,
-      effectiveFinalCapital: step.effective_final_capital,
-      depletionMonths: step.depletion_months,
-    })),
-    residualError: data.residual_error,
-    residualErrorRatio: data.residual_error_ratio,
-  };
+    return {
+      scale: data.scale,
+      recommendedMonthlySavings: data.recommended_monthly_savings,
+      minimumCapitalAtRetirement: data.minimum_capital_at_retirement ?? 0,
+      monteCarloResult: buildMonteCarloResultFromApi(data.monte_carlo_result),
+      retirementResults: buildRetirementScenarioResultsFromApi(data.retirement_results),
+      steps: (data.steps ?? []).map((step: any) => ({
+        iteration: step.iteration,
+        scale: step.scale,
+        monthlySavings: step.monthly_savings,
+        finalCapital: step.final_capital,
+        effectiveFinalCapital: step.effective_final_capital,
+        depletionMonths: step.depletion_months,
+      })),
+      residualError: data.residual_error,
+      residualErrorRatio: data.residual_error_ratio,
+    };
 }
 
