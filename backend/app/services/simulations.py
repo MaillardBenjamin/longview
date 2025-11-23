@@ -65,9 +65,10 @@ def create_simulation(
     Returns:
         Simulation créée avec son ID généré
     """
+    simulation_data = simulation_in.model_dump(exclude_unset=True)
     simulation = Simulation(
         user_id=user_id,
-        **simulation_in.model_dump(exclude_unset=True),
+        **simulation_data,
     )
     db.add(simulation)
     db.commit()

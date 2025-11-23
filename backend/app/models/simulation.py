@@ -14,6 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
+    from app.models.project import Project
     from app.models.user import User
 
 
@@ -23,12 +24,16 @@ class Simulation(Base):
     
     Stocke les paramètres d'entrée et les résultats d'une simulation
     pour permettre leur sauvegarde et réutilisation.
+    Une simulation appartient à un projet et peut aussi être liée directement à un utilisateur.
     """
     __tablename__ = "simulations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     current_age: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -51,4 +56,5 @@ class Simulation(Base):
     )
 
     owner: Mapped["User | None"] = relationship(back_populates="simulations")
+    project: Mapped["Project | None"] = relationship(back_populates="simulations")
 

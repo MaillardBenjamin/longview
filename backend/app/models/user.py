@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
+    from app.models.project import Project
     from app.models.simulation import Simulation
 
 
@@ -23,7 +24,7 @@ class User(Base):
     Modèle d'utilisateur.
     
     Stocke les informations d'authentification et de profil de l'utilisateur.
-    Les simulations sont liées via une relation one-to-many.
+    Les projets et simulations sont liés via des relations one-to-many.
     """
     __tablename__ = "users"
 
@@ -41,5 +42,6 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    projects: Mapped[list["Project"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     simulations: Mapped[list["Simulation"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
 

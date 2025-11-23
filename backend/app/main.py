@@ -4,11 +4,34 @@ Point d'entrée principal de l'application FastAPI.
 Configure l'application FastAPI, le middleware CORS, et les routes principales.
 """
 
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app.api.api_v1_router import api_router
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Import de l'API router (qui importe tous les endpoints et schémas)
+from app.api.api_v1_router import api_router
+
+# Import explicite du module simulation pour s'assurer que SimulationRead est disponible
+# avant la résolution des références forward
+from app.schemas import simulation  # noqa: F401
+
+# Résolution des références forward dans les schémas Pydantic
+# Doit être fait après l'import de tous les modules
+try:
+    from app.schemas.project import _update_forward_refs
+    _update_forward_refs()
+except Exception as e:
+    # Si le rebuild échoue, on log l'erreur mais on continue
+    # Pydantic résoudra automatiquement lors de la première utilisation si nécessaire
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Could not rebuild forward refs: {e}")
 
 # Initialisation de l'application FastAPI
 app = FastAPI(
@@ -48,6 +71,23 @@ def read_root() -> dict[str, str]:
         Message de bienvenue
     """
     return {"message": "Welcome to LongView"}
+
+
+# Handler pour les erreurs de validation Pydantic
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Handler personnalisé pour les erreurs de validation Pydantic.
+    Log les erreurs et retourne une réponse JSON détaillée.
+    """
+    body = await request.body()
+    logger.error(f"Erreur de validation pour {request.method} {request.url}")
+    logger.error(f"Détails de l'erreur: {exc.errors()}")
+    logger.error(f"Corps de la requête (premiers 500 caractères): {body[:500]}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors(), "body_preview": body[:500].decode("utf-8", errors="ignore")},
+    )
 
 
 # Inclusion du routeur API v1

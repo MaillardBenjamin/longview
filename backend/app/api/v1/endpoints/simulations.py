@@ -57,6 +57,9 @@ def create_simulation(
     """
     Crée une nouvelle simulation pour l'utilisateur authentifié.
     
+    Si un project_id est fourni, vérifie que le projet appartient à l'utilisateur.
+    Si aucun project_id n'est fourni, crée automatiquement un projet avec le nom de la simulation.
+    
     Args:
         simulation_in: Données de la nouvelle simulation
         current_user: Utilisateur authentifié (via dépendance)
@@ -64,12 +67,53 @@ def create_simulation(
         
     Returns:
         Simulation créée avec son ID généré
+        
+    Raises:
+        HTTPException: Si le projet n'existe pas ou n'appartient pas à l'utilisateur
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Création de simulation - Utilisateur: {current_user.id if current_user else None}")
+    logger.info(f"Données reçues: name={simulation_in.name}, current_age={simulation_in.current_age}, "
+                f"retirement_age={simulation_in.retirement_age}, project_id={simulation_in.project_id}")
+    
+    from app.services import projects as project_service
+    from app.schemas.project import ProjectCreate
+    
+    # Si l'utilisateur est connecté et qu'aucun projet n'est spécifié, créer un projet automatiquement
+    project_id = simulation_in.project_id
+    if current_user and project_id is None:
+        logger.info(f"Création automatique d'un projet pour la simulation '{simulation_in.name}'")
+        project = project_service.create_project(
+            db,
+            user_id=current_user.id,
+            project_in=ProjectCreate(
+                name=simulation_in.name,
+                description=f"Projet créé automatiquement pour la simulation '{simulation_in.name}'",
+            ),
+        )
+        # Créer une nouvelle instance avec le project_id mis à jour
+        project_id = project.id
+        simulation_in = simulation_in.model_copy(update={"project_id": project_id})
+        logger.info(f"Projet créé avec ID: {project_id}")
+    # Vérification de sécurité : s'assurer que le projet appartient à l'utilisateur
+    elif project_id is not None:
+        logger.info(f"Utilisation du projet existant: {project_id}")
+        project = project_service.get_project(db, project_id)
+        if not project or project.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found or access denied",
+            )
+    
+    logger.info(f"Création de la simulation avec project_id={simulation_in.project_id}")
     simulation = simulation_service.create_simulation(
         db,
         user_id=current_user.id,
         simulation_in=simulation_in,
     )
+    logger.info(f"Simulation créée avec succès - ID: {simulation.id}, project_id: {simulation.project_id}")
     return SimulationRead.model_validate(simulation)
 
 
@@ -107,6 +151,8 @@ def update_simulation(
     """
     Met à jour une simulation existante appartenant à l'utilisateur authentifié.
     
+    Si un project_id est fourni, vérifie que le projet appartient à l'utilisateur.
+    
     Args:
         simulation_id: Identifiant de la simulation
         simulation_in: Données de mise à jour
@@ -117,9 +163,21 @@ def update_simulation(
         Simulation mise à jour
         
     Raises:
-        HTTPException: Si la simulation n'existe pas ou n'appartient pas à l'utilisateur
+        HTTPException: Si la simulation n'existe pas, n'appartient pas à l'utilisateur,
+                       ou si le projet n'existe pas ou n'appartient pas à l'utilisateur
     """
     simulation = _get_owned_simulation_or_404(db, simulation_id, current_user)
+    
+    # Vérification de sécurité : s'assurer que le projet appartient à l'utilisateur
+    if simulation_in.project_id is not None:
+        from app.services import projects as project_service
+        project = project_service.get_project(db, simulation_in.project_id)
+        if not project or project.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found or access denied",
+            )
+    
     simulation = simulation_service.update_simulation(db, simulation, simulation_in)
     return SimulationRead.model_validate(simulation)
 

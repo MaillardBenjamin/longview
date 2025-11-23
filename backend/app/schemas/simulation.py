@@ -21,11 +21,12 @@ class SimulationBase(BaseModel):
 
 
 class SimulationCreate(SimulationBase):
-    pass
+    project_id: int | None = None
 
 
 class SimulationUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
+    project_id: int | None = None
     target_monthly_income: float | None = Field(default=None, ge=0)
     state_pension_monthly_income: float | None = Field(default=None, ge=0)
     housing_loan_end_age: NonNegativeInt | None = None
@@ -40,6 +41,7 @@ class SimulationUpdate(BaseModel):
 class SimulationRead(SimulationBase):
     id: int
     user_id: int | None
+    project_id: int | None
     created_at: datetime
     updated_at: datetime
 

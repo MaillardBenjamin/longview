@@ -175,31 +175,31 @@ def optimize_savings_plan(
         nonlocal search_range_width, initial_range_width
         
         if search_range_width is None or initial_range_width is None:
-            # Première itération : utiliser le minimum (10 itérations pour être très rapide)
-            return 10
+            # Première itération : utiliser 100 itérations pour un bon équilibre vitesse/précision
+            return 100
         
         # Calculer le ratio de réduction de la plage de recherche
         reduction_ratio = search_range_width / initial_range_width
         
-        # Au début (réduction > 50%), utiliser 10 itérations pour être très rapide
-        # Entre 50% et 25%, utiliser 10-50 itérations
-        # Entre 25% et 10%, utiliser 50-200 itérations
-        # Entre 10% et 1%, utiliser 200-500 itérations
+        # Au début (réduction > 50%), utiliser 100 itérations pour un bon équilibre
+        # Entre 50% et 25%, utiliser 100-200 itérations
+        # Entre 25% et 10%, utiliser 200-500 itérations
+        # Entre 10% et 1%, utiliser 500-1000 itérations
         # En dessous de 1%, utiliser le maximum
         if reduction_ratio > 0.5:
-            return 10
+            return 100
         elif reduction_ratio > 0.25:
-            # Interpolation linéaire entre 10 et 50
+            # Interpolation linéaire entre 100 et 200
             progress = (0.5 - reduction_ratio) / 0.25  # 0 à 1 quand reduction_ratio passe de 0.5 à 0.25
-            return int(10 + progress * 40)
+            return int(100 + progress * 100)
         elif reduction_ratio > 0.1:
-            # Interpolation linéaire entre 50 et 200
-            progress = (0.25 - reduction_ratio) / 0.15  # 0 à 1 quand reduction_ratio passe de 0.25 à 0.1
-            return int(50 + progress * 150)
-        elif reduction_ratio > 0.01:
             # Interpolation linéaire entre 200 et 500
-            progress = (0.1 - reduction_ratio) / 0.09  # 0 à 1 quand reduction_ratio passe de 0.1 à 0.01
+            progress = (0.25 - reduction_ratio) / 0.15  # 0 à 1 quand reduction_ratio passe de 0.25 à 0.1
             return int(200 + progress * 300)
+        elif reduction_ratio > 0.01:
+            # Interpolation linéaire entre 500 et 1000
+            progress = (0.1 - reduction_ratio) / 0.09  # 0 à 1 quand reduction_ratio passe de 0.1 à 0.01
+            return int(500 + progress * 500)
         else:
             # Utiliser le maximum pour la précision finale
             return max_iterations_mc
@@ -226,7 +226,7 @@ def optimize_savings_plan(
 
         # Ajuster le batch_size pour être cohérent avec le nombre d'itérations
         # Si on utilise peu d'itérations, on réduit aussi le batch_size
-        adaptive_batch_size = min(batch_size, max(10, iterations_to_use))
+        adaptive_batch_size = min(batch_size, max(100, iterations_to_use))
 
         # Mise à l'échelle des phases d'épargne et des comptes
         scaled_phases = scale_savings_phases(payload.savings_phases, scale)
@@ -286,6 +286,11 @@ def optimize_savings_plan(
         # Capital effectif = capital brut - pénalité pour épuisement précoce
         effective_final_capital = final_capital - early_penalty
         error = effective_final_capital - payload.target_final_capital
+        # Un scénario est suffisant si :
+        # 1. Pas d'épuisement précoce du capital
+        # 2. Le capital atteint au moins l'objectif (error >= -tolerance_capital)
+        # Note : On accepte un dépassement de l'objectif, car l'algorithme ne peut que augmenter
+        # l'épargne (facteur >= 0). Si le capital initial dépasse déjà l'objectif, c'est acceptable.
         sufficient = months_remaining_penalty == 0 and error >= -tolerance_capital
 
         # Enregistrement de l'étape d'optimisation
@@ -341,7 +346,14 @@ def optimize_savings_plan(
     # Évaluation initiale avec facteur 0 (épargnes existantes uniquement)
     low = evaluate(0.0)
     if low.sufficient:
-        logger.info("Objectif atteint avec les épargnes existantes (facteur 0).")
+        logger.info(
+            "Objectif atteint avec les épargnes existantes (facteur 0). "
+            "Capital final=%.2f €, objectif=%.2f €, dépassement=%.2f €. "
+            "L'épargne minimum nécessaire est 0 €/mois (les versements actuels sont déjà suffisants).",
+            low.effective_final_capital,
+            payload.target_final_capital,
+            low.error,
+        )
         final_choice = low
     else:
         # Recherche d'une borne supérieure suffisante
@@ -430,13 +442,35 @@ def optimize_savings_plan(
         final_choice.depletion_months,
     )
 
-    # Retourner les courbes avec les versements réels (scale=1.0) et l'épargne minimum totale
+    # Toujours retourner les courbes avec les versements réels (scale=1.0)
+    # Le facteur optimal trouvé (final_choice.scale) sert à calculer l'épargne minimum recommandée,
+    # mais les courbes affichées sont toujours celles avec les versements actuels de l'utilisateur
+    logger.info(
+        "Retour des courbes avec versements réels (scale=1.0). "
+        "Facteur optimal trouvé : %.4f, épargne minimum : %.2f €/mois",
+        final_choice.scale,
+        final_choice.total_savings,
+    )
+    
+    # Vérifier que les données sont bien présentes avant de retourner
+    logger.info(
+        "Vérification des données avant retour : accumulation_real=%s, retirement_real=%s",
+        "présent" if accumulation_real else "ABSENT",
+        "présent" if retirement_real else "ABSENT",
+    )
+    
+    if not accumulation_real:
+        logger.error("ERREUR : accumulation_real est None !")
+    if not retirement_real:
+        logger.error("ERREUR : retirement_real est None !")
+    
+    # Retourner le résultat de l'optimisation
     return RecommendedSavingsResult(
-        scale=1.0,  # Les courbes reflètent les versements réels
-        recommended_monthly_savings=max(0.0, final_choice.total_savings),  # Épargne minimum totale nécessaire
-        minimum_capital_at_retirement=minimum_capital_at_retirement,  # Capital minimum nécessaire à la retraite
-        monte_carlo_result=accumulation_real,  # Courbes avec versements réels
-        retirement_results=retirement_real,  # Courbes avec versements réels
+        scale=final_choice.scale,  # Facteur optimal trouvé par l'algorithme
+        recommended_monthly_savings=max(0.0, final_choice.total_savings),  # Épargne minimum nécessaire
+        minimum_capital_at_retirement=minimum_capital_at_retirement,
+        monte_carlo_result=accumulation_real,  # Toujours les courbes avec versements réels
+        retirement_results=retirement_real,  # Toujours les courbes avec versements réels
         steps=steps,
         residual_error=final_choice.error,
         residual_error_ratio=(

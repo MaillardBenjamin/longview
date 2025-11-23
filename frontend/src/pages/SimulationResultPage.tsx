@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import ReactECharts from "echarts-for-react";
-import { Box, Card, CardContent, Container, Typography } from "@mui/material";
+import { Box, Card, CardContent, Container, Typography, Button } from "@mui/material";
 import GridLegacy from "@mui/material/GridLegacy";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { useAuth } from "@/hooks/useAuth";
 import { listSimulations, simulateMonteCarlo } from "@/services/simulations";
 import { OptimizationIterationsChart } from "@/components/results/OptimizationIterationsChart";
@@ -91,8 +92,9 @@ const DEFAULT_MARKET_ASSUMPTIONS: MarketAssumptions = {
 
 export function SimulationResultPage() {
   const location = useLocation();
-const navigationState = (location.state as LocationState) ?? null;
-const storedState = useMemo<LocationState | null>(() => {
+  const navigate = useNavigate();
+  const navigationState = (location.state as LocationState) ?? null;
+  const storedState = useMemo<LocationState | null>(() => {
     const raw = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("lv_last_simulation_result") : null;
     if (!raw) return null;
     try {
@@ -119,30 +121,13 @@ const storedState = useMemo<LocationState | null>(() => {
     (simulationRecord?.results_snapshot as SimulationResult | undefined);
   const result = locationState?.result ?? resultFromSimulation ?? null;
 
-  // Vérifier si on a des données de simulation (soit via simulation/result, soit via draft + résultats Monte Carlo)
-  const hasSimulationData =
-    simulation ||
-    result ||
-    draft ||
-    locationState?.monteCarloResult ||
-    locationState?.retirementMonteCarloResult;
+  // Vérifier s'il y a des données de simulation en cours dans sessionStorage
+  const hasDraftData = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const saved = sessionStorage.getItem("lv_simulation_form_data");
+    return !!saved;
+  }, []);
 
-  if (!hasSimulationData) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Card>
-          <CardContent sx={{ textAlign: "center", py: 6 }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-              Aucune simulation disponible
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Commencez par renseigner vos informations pour projeter votre retraite.
-            </Typography>
-          </CardContent>
-        </Card>
-      </Container>
-    );
-  }
   const getSimulationValue = <T,>(camel: string, snake: string): T | undefined => {
     if (!simulationRecord) return undefined;
     return (simulationRecord[camel] as T | undefined) ?? (simulationRecord[snake] as T | undefined);
@@ -306,6 +291,105 @@ const marketAssumptions =
   const optimizationScale = locationState?.optimizationScale;
   const optimizationResidualError = locationState?.optimizationResidualError ?? null;
   const optimizationResidualErrorRatio = locationState?.optimizationResidualErrorRatio ?? null;
+
+  // Vérifier si on a vraiment des RÉSULTATS exploitables (pas juste des données d'entrée)
+  const hasActualResults = useMemo(() => {
+    // Vérifier les résultats directs (result doit avoir au moins une propriété de résultat)
+    if (result) {
+      if (
+        (result.requiredMonthlySavings !== undefined && result.requiredMonthlySavings !== null) ||
+        (result.projectedCapitalAtRetirement !== undefined && result.projectedCapitalAtRetirement !== null) ||
+        (result.projectedCapitalAtLifeExpectancy !== undefined && result.projectedCapitalAtLifeExpectancy !== null) ||
+        (result.successProbability !== undefined && result.successProbability !== null)
+      ) {
+        return true;
+      }
+    }
+    
+    // Vérifier les résultats Monte Carlo (depuis locationState ou fetched)
+    // Doit avoir au moins medianFinalCapital ou monthlyPercentiles avec des données
+    if (monteCarloResult) {
+      if (
+        (monteCarloResult.medianFinalCapital !== undefined && monteCarloResult.medianFinalCapital !== null) ||
+        (monteCarloResult.monthlyPercentiles && monteCarloResult.monthlyPercentiles.length > 0)
+      ) {
+        return true;
+      }
+    }
+    
+    // Vérifier les résultats de retraite
+    if (retirementMonteCarloResult) {
+      if (
+        retirementMonteCarloResult.median &&
+        (
+          (retirementMonteCarloResult.median.medianFinalCapital !== undefined && retirementMonteCarloResult.median.medianFinalCapital !== null) ||
+          (retirementMonteCarloResult.median.monthlyPercentiles && retirementMonteCarloResult.median.monthlyPercentiles.length > 0)
+        )
+      ) {
+        return true;
+      }
+    }
+    
+    // Vérifier recommendedSavings (doit être > 0 pour être valide)
+    if (recommendedSavings !== undefined && recommendedSavings !== null && recommendedSavings > 0) {
+      return true;
+    }
+    
+    return false;
+  }, [result, monteCarloResult, retirementMonteCarloResult, recommendedSavings]);
+
+  // Si on a des résultats ou qu'on est en train de les charger, on affiche la page
+  // Sinon, on affiche le message pour lancer une simulation
+  const shouldShowResults = hasActualResults || (monteCarloLoading && capitalizationInput);
+
+  if (!shouldShowResults) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Card
+          sx={{
+            textAlign: "center",
+            py: 6,
+            background: "rgba(255, 255, 255, 0.92)",
+            borderRadius: "1.25rem",
+            boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
+            border: "1px solid rgba(148, 163, 184, 0.2)",
+          }}
+        >
+          <CardContent>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
+              Aucun résultat de simulation disponible
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: "600px", mx: "auto" }}>
+              {hasDraftData
+                ? "Vous avez une simulation en cours. Lancez le calcul pour voir les résultats."
+                : "Commencez par renseigner vos informations et lancez une simulation pour voir les résultats."}
+            </Typography>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<PlayArrowIcon />}
+              onClick={() => navigate("/simulation")}
+              sx={{
+                px: 4,
+                py: 1.5,
+                fontSize: "1rem",
+                fontWeight: 600,
+                borderRadius: "999px",
+                background: "linear-gradient(135deg, #38bdf8, #0ea5e9)",
+                "&:hover": {
+                  background: "linear-gradient(135deg, #0ea5e9, #0284c7)",
+                  transform: "translateY(-2px)",
+                  boxShadow: "0 8px 24px rgba(14, 165, 233, 0.35)",
+                },
+              }}
+            >
+              {hasDraftData ? "Continuer la simulation" : "Lancer une simulation"}
+            </Button>
+          </CardContent>
+        </Card>
+      </Container>
+    );
+  }
 
   useEffect(() => {
     if (!simulation && !result && !draft && !monteCarloResult && !retirementMonteCarloResult) {
@@ -844,8 +928,8 @@ function MonteCarloSection({
             Phase de capitalisation – Simulation Monte Carlo
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            {result.iterations.toLocaleString("fr-FR")}&nbsp;tirages · confiance {Math.round(result.confidenceLevel * 100)}% · marge ±
-            {Math.round(result.toleranceRatio * 100)}%
+            {result.iterations?.toLocaleString("fr-FR") ?? "0"}&nbsp;tirages · confiance {Math.round((result.confidenceLevel ?? 0.9) * 100)}% · marge ±
+            {Math.round((result.toleranceRatio ?? 0.01) * 100)}%
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
             La courbe médiane représente le percentile 50 de la distribution finale, tandis que la carte « Moyenne des

@@ -218,6 +218,7 @@ export interface SimulationResult {
 export interface Simulation extends SimulationInput {
   id: number;
   userId?: number;
+  projectId?: number;
   currentAge: number;
   retirementAge: number;
   lifeExpectancy?: number;

@@ -5,7 +5,7 @@
  * et améliorer l'expérience utilisateur.
  */
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
   Button,
@@ -14,20 +14,26 @@ import {
   Checkbox,
   CircularProgress,
   Container,
+  FormControl,
   FormControlLabel,
+  FormHelperText,
   LinearProgress,
+  MenuItem,
   Paper,
+  Select,
   Step,
   StepButton,
   Stepper,
   TextField,
   Typography,
 } from "@mui/material";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useSimulationForm } from "@/hooks/useSimulationForm";
-import { optimizeSavingsPlan } from "@/services/simulations";
+import { optimizeSavingsPlan, createSimulation, updateSimulation } from "@/services/simulations";
+import { useAuth } from "@/hooks/useAuth";
+import { fetchProjects, createProject, updateProject } from "@/services/projects";
 import { PersonalInfoStep } from "@/components/onboarding/PersonalInfoStep";
 import { RetirementGoalsStep } from "@/components/onboarding/RetirementGoalsStep";
 import { SavingsStep } from "@/components/onboarding/SavingsStep";
@@ -48,6 +54,11 @@ const steps = [
 
 export function OnboardingPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const currentProjectIdRef = useRef<number | null>(null);
+  const currentSimulationIdRef = useRef<number | null>(null);
+  
   const [activeStep, setActiveStep] = useState(() => {
     const saved = sessionStorage.getItem("lv_simulation_active_step");
     return saved ? parseInt(saved, 10) : 0;
@@ -56,15 +67,13 @@ export function OnboardingPage() {
     const saved = sessionStorage.getItem("lv_cgu_accepted");
     return saved === "true";
   });
+  const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
 
-  // Sauvegarder l'étape active dans sessionStorage
-  useEffect(() => {
-    sessionStorage.setItem("lv_simulation_active_step", String(activeStep));
-  }, [activeStep]);
-
+  // Récupérer les données du formulaire AVANT les useEffect qui les utilisent
   const {
     formData,
     updateFormData,
+    reloadFromStorage,
     updateAdult,
     addAdult,
     removeAdult,
@@ -90,9 +99,141 @@ export function OnboardingPage() {
     addChildCharge,
   } = useSimulationForm();
 
+  // Recharger les données depuis sessionStorage au montage de la page
+  // Cela permet de charger une simulation sauvegardée dans ProjectDetailPage
+  useEffect(() => {
+    // Attendre un peu pour s'assurer que sessionStorage est bien mis à jour
+    const timer = setTimeout(() => {
+      const saved = sessionStorage.getItem("lv_simulation_form_data");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          console.log("Données trouvées dans sessionStorage au montage:", parsed);
+          console.log("Adults dans sessionStorage:", parsed.adults?.length);
+          console.log("Children dans sessionStorage:", parsed.children?.length);
+          // Recharger les données
+          reloadFromStorage();
+        } catch (error) {
+          console.warn("Erreur lors du rechargement des données:", error);
+        }
+      }
+    }, 200); // Petit délai pour s'assurer que sessionStorage est mis à jour
+    
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Exécuter une seule fois au montage
+
+  // Récupérer les projets de l'utilisateur si connecté
+  const { data: projects } = useQuery({
+    queryKey: ["projects"],
+    queryFn: fetchProjects,
+    enabled: !!user,
+    retry: false,
+    onError: (error) => {
+      console.error("Erreur lors de la récupération des projets:", error);
+    },
+  });
+
+  // Récupérer ou créer un projet "en cours" au chargement (une seule fois)
+  useEffect(() => {
+    if (!user || !projects) return;
+
+    // Récupérer l'ID de la simulation brouillon si elle existe
+    const savedSimulationId = sessionStorage.getItem("lv_current_simulation_id");
+    if (savedSimulationId) {
+      const simulationId = parseInt(savedSimulationId, 10);
+      currentSimulationIdRef.current = simulationId;
+    }
+
+    // Si on a déjà un projet en cours sauvegardé, l'utiliser
+    const savedProjectId = sessionStorage.getItem("lv_current_project_id");
+    if (savedProjectId) {
+      const projectId = parseInt(savedProjectId, 10);
+      const project = projects.find((p) => p.id === projectId);
+      if (project) {
+        currentProjectIdRef.current = projectId;
+        setCurrentProjectId(projectId);
+        return;
+      }
+    }
+
+    // Utiliser le premier projet (généralement le projet par défaut créé à l'inscription)
+    // ou créer un nouveau projet "en cours"
+    if (projects.length > 0) {
+      const defaultProject = projects[0];
+      currentProjectIdRef.current = defaultProject.id;
+      setCurrentProjectId(defaultProject.id);
+      sessionStorage.setItem("lv_current_project_id", String(defaultProject.id));
+    } else {
+      // Créer un nouveau projet "en cours"
+      createProject({
+        name: "Projet en cours",
+        description: "Projet de simulation en cours de création",
+      })
+        .then((project) => {
+          currentProjectIdRef.current = project.id;
+          setCurrentProjectId(project.id);
+          sessionStorage.setItem("lv_current_project_id", String(project.id));
+          queryClient.invalidateQueries({ queryKey: ["projects"] });
+        })
+        .catch((error) => {
+          console.error("Erreur lors de la création du projet:", error);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, projects]);
+
+  // Gérer le changement de projet
+  const handleProjectChange = (newProjectId: number) => {
+    currentProjectIdRef.current = newProjectId;
+    setCurrentProjectId(newProjectId);
+    sessionStorage.setItem("lv_current_project_id", String(newProjectId));
+  };
+
+  // Sauvegarder l'étape active dans sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("lv_simulation_active_step", String(activeStep));
+  }, [activeStep]);
+
+  // Sauvegarder automatiquement le projet et la simulation à chaque changement de nom ou d'étape
+  useEffect(() => {
+    if (!user || !currentProjectIdRef.current) return;
+
+    const projectId = currentProjectIdRef.current;
+    const timeoutId = setTimeout(async () => {
+      // Ne mettre à jour que la description du projet, pas son nom
+      // Le nom du projet doit rester celui défini par l'utilisateur
+      updateProject(projectId, {
+        description: `Simulation en cours - Étape ${activeStep + 1}/${steps.length}: ${steps[activeStep]}`,
+      }).catch((error) => {
+        console.error("Erreur lors de la mise à jour du projet:", error);
+      });
+
+      // Créer ou mettre à jour la simulation en brouillon
+      try {
+        if (currentSimulationIdRef.current) {
+          // Mettre à jour la simulation existante
+          console.log("Mise à jour de la simulation brouillon:", currentSimulationIdRef.current);
+          await updateSimulation(currentSimulationIdRef.current, formData, projectId);
+        } else {
+          // Créer une nouvelle simulation brouillon
+          console.log("Création d'une nouvelle simulation brouillon");
+          const simulation = await createSimulation(formData, projectId);
+          currentSimulationIdRef.current = simulation.id;
+          sessionStorage.setItem("lv_current_simulation_id", String(simulation.id));
+          console.log("Simulation brouillon créée avec ID:", simulation.id);
+        }
+      } catch (error) {
+        console.error("Erreur lors de la sauvegarde automatique de la simulation:", error);
+      }
+    }, 1000); // Debounce de 1 seconde pour éviter trop de requêtes
+
+    return () => clearTimeout(timeoutId);
+  }, [formData, activeStep, user]);
+
   const optimizeMutation = useMutation({
     mutationFn: optimizeSavingsPlan,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       console.log("Résultat de l'optimisation reçu:", {
         scale: result.scale,
         recommendedMonthlySavings: result.recommendedMonthlySavings,
@@ -101,8 +242,42 @@ export function OnboardingPage() {
         stepsCount: result.steps.length,
       });
       
+      // Si l'utilisateur est connecté, créer une simulation en base de données
+      let savedSimulation = null;
+      if (user) {
+        try {
+          // Utiliser le projet en cours s'il existe
+          // Sinon, le backend créera automatiquement un projet avec le nom de la simulation
+          const projectId = currentProjectIdRef.current;
+          
+          console.log("Création de simulation - Utilisateur connecté:", user.id);
+          console.log("Données du formulaire:", {
+            name: formData.name,
+            adults: formData.adults?.length,
+            projectId: projectId,
+          });
+          
+          // Créer la simulation
+          // Si projectId est fourni, la simulation sera associée à ce projet
+          // Sinon, le backend créera automatiquement un projet avec le nom de la simulation
+          console.log("Appel à createSimulation avec projectId:", projectId);
+          savedSimulation = await createSimulation(formData, projectId ?? undefined);
+          console.log("Simulation créée avec succès:", savedSimulation);
+        } catch (error: any) {
+          console.error("Erreur lors de la création de la simulation:", error);
+          console.error("Détails de l'erreur:", {
+            message: error?.message,
+            response: error?.response?.data,
+            status: error?.response?.status,
+          });
+          // On continue même si la création échoue
+        }
+      } else {
+        console.log("Utilisateur non connecté - simulation non sauvegardée");
+      }
+      
       const state = {
-        simulation: null,
+        simulation: savedSimulation,
         draft: formData,
         recommendedSavings: result.recommendedMonthlySavings,
         minimumCapitalAtRetirement: result.minimumCapitalAtRetirement,
@@ -222,6 +397,8 @@ export function OnboardingPage() {
     }
   };
 
+  const currentProject = projects?.find((p) => p.id === currentProjectId);
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
@@ -229,6 +406,29 @@ export function OnboardingPage() {
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
             Simulation de retraite
           </Typography>
+          
+          {/* Sélecteur de projet si l'utilisateur est connecté */}
+          {user && projects && projects.length > 0 && (
+            <FormControl fullWidth sx={{ mt: 2, mb: 2, maxWidth: 400 }}>
+              <Select
+                value={currentProjectId || ""}
+                onChange={(e) => handleProjectChange(Number(e.target.value))}
+                displayEmpty
+              >
+                {projects.map((project) => (
+                  <MenuItem key={project.id} value={project.id}>
+                    {project.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                {currentProject
+                  ? `Simulation enregistrée dans le projet "${currentProject.name}"`
+                  : "Sélectionnez le projet dans lequel enregistrer cette simulation"}
+              </FormHelperText>
+            </FormControl>
+          )}
+          
           <TextField
             fullWidth
             label="Nom de la simulation"

@@ -9,12 +9,22 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(
+        min_length=8,
+        max_length=72,  # Limite de bcrypt en bytes (72 bytes ≈ 72 caractères ASCII)
+        description="Le mot de passe doit contenir entre 8 et 72 caractères"
+    )
 
 
 class UserUpdate(BaseModel):
+    email: EmailStr | None = Field(default=None, description="Nouvelle adresse email")
     full_name: str | None = Field(default=None, max_length=255)
-    password: str | None = Field(default=None, min_length=8, max_length=128)
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=72,  # Limite de bcrypt en bytes
+        description="Le mot de passe doit contenir entre 8 et 72 caractères"
+    )
 
 
 class UserRead(UserBase):

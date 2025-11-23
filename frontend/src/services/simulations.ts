@@ -22,14 +22,23 @@ import type {
  * Convertit les données de simulation du format frontend vers le format API backend.
  * 
  * @param simulation - Données de simulation au format frontend
+ * @param projectId - ID du projet optionnel à associer à la simulation
  * @returns Données au format API backend
  */
-function mapSimulationInputToApi(simulation: SimulationInput) {
+function mapSimulationInputToApi(simulation: SimulationInput, projectId?: number) {
   const primaryAdult = simulation.adults[0];
 
   const currentAge = primaryAdult?.currentAge ?? 0;
-  const retirementAge = primaryAdult?.retirementAge ?? currentAge + 25;
+  const retirementAge = primaryAdult?.retirementAge ?? (currentAge > 0 ? currentAge + 25 : 65);
   const lifeExpectancy = primaryAdult?.lifeExpectancy;
+  
+  console.log("mapSimulationInputToApi - Données extraites:", {
+    currentAge,
+    retirementAge,
+    lifeExpectancy,
+    projectId,
+    hasAdults: !!primaryAdult,
+  });
   const householdCharges = simulation.householdCharges ?? [];
   const childCharges = simulation.childCharges ?? [];
   const housingLoanCharge = householdCharges.find(
@@ -44,16 +53,35 @@ function mapSimulationInputToApi(simulation: SimulationInput) {
     return max === undefined ? candidate : Math.max(max, candidate);
   }, undefined);
 
-  return {
+  // Validation : current_age et retirement_age doivent être des entiers positifs
+  if (currentAge <= 0) {
+    throw new Error(`current_age doit être un entier positif, reçu: ${currentAge}`);
+  }
+  if (retirementAge <= 0) {
+    throw new Error(`retirement_age doit être un entier positif, reçu: ${retirementAge}`);
+  }
+  
+  // Convertir additional_income_streams de tableau à dictionnaire si nécessaire
+  // Le backend attend un dict[str, float] ou None, pas un tableau
+  let additionalIncomeStreamsDict: Record<string, number> | null = null;
+  if (simulation.additionalIncomeStreams && simulation.additionalIncomeStreams.length > 0) {
+    additionalIncomeStreamsDict = {};
+    simulation.additionalIncomeStreams.forEach((stream) => {
+      // Utiliser le label comme clé et monthlyAmount comme valeur
+      additionalIncomeStreamsDict![stream.label] = stream.monthlyAmount;
+    });
+  }
+  
+  const apiData: any = {
     name: simulation.name,
-    current_age: currentAge,
-    retirement_age: retirementAge,
-    life_expectancy: lifeExpectancy,
+    current_age: Math.round(currentAge), // S'assurer que c'est un entier
+    retirement_age: Math.round(retirementAge), // S'assurer que c'est un entier
+    life_expectancy: lifeExpectancy ? Math.round(lifeExpectancy) : null,
     target_monthly_income: simulation.targetMonthlyIncome,
     state_pension_monthly_income: simulation.statePensionMonthlyIncome,
     housing_loan_end_age: housingLoanCharge?.untilAge ?? simulation.housingLoanEndAge,
     dependents_departure_age: dependentsDepartureAge ?? simulation.dependentsDepartureAge,
-    additional_income_streams: simulation.additionalIncomeStreams,
+    additional_income_streams: additionalIncomeStreamsDict,
     inputs_snapshot: {
       household_status: simulation.householdStatus,
       adults: simulation.adults,
@@ -67,6 +95,21 @@ function mapSimulationInputToApi(simulation: SimulationInput) {
       market_assumptions: simulation.marketAssumptions,
     },
   };
+  
+  // Ajouter project_id si fourni
+  if (projectId !== undefined) {
+    apiData.project_id = projectId;
+  }
+  
+  console.log("mapSimulationInputToApi - Données finales envoyées:", {
+    name: apiData.name,
+    current_age: apiData.current_age,
+    retirement_age: apiData.retirement_age,
+    project_id: apiData.project_id,
+    has_inputs_snapshot: !!apiData.inputs_snapshot,
+  });
+  
+  return apiData;
 }
 
 /**
@@ -184,29 +227,29 @@ function mapMarketAssumptionsToApi(market: SimulationInput["marketAssumptions"])
  */
 function buildMonteCarloResultFromApi(data: any): MonteCarloResult {
   return {
-    iterations: data.iterations,
-    confidenceLevel: data.confidence_level,
-    toleranceRatio: data.tolerance_ratio,
-    confidenceReached: data.confidence_reached,
-    errorMargin: data.error_margin,
-    errorMarginRatio: data.error_margin_ratio,
-    meanFinalCapital: data.mean_final_capital,
-    medianFinalCapital: data.median_final_capital,
-    percentile10: data.percentile_10,
-    percentile50: data.percentile_50,
-    percentile90: data.percentile_90,
-    percentileMin: data.percentile_min,
-    percentileMax: data.percentile_max,
-    standardDeviation: data.standard_deviation,
-    monthlyPercentiles: (data.monthly_percentiles ?? []).map((point: any) => ({
-      monthIndex: point.month_index,
-      age: point.age,
-      percentileMin: point.percentile_min,
-      percentile10: point.percentile_10,
-      percentile50: point.percentile_50,
-      percentile90: point.percentile_90,
-      percentileMax: point.percentile_max,
-      cumulativeContribution: point.cumulative_contribution,
+    iterations: data.iterations ?? 0,
+    confidenceLevel: data.confidenceLevel ?? data.confidence_level ?? 0.9,
+    toleranceRatio: data.toleranceRatio ?? data.tolerance_ratio ?? 0.01,
+    confidenceReached: data.confidenceReached ?? data.confidence_reached ?? false,
+    errorMargin: data.errorMargin ?? data.error_margin ?? 0,
+    errorMarginRatio: data.errorMarginRatio ?? data.error_margin_ratio ?? 0,
+    meanFinalCapital: data.meanFinalCapital ?? data.mean_final_capital ?? 0,
+    medianFinalCapital: data.medianFinalCapital ?? data.median_final_capital ?? 0,
+    percentile10: data.percentile10 ?? data.percentile_10 ?? 0,
+    percentile50: data.percentile50 ?? data.percentile_50 ?? 0,
+    percentile90: data.percentile90 ?? data.percentile_90 ?? 0,
+    percentileMin: data.percentileMin ?? data.percentile_min ?? 0,
+    percentileMax: data.percentileMax ?? data.percentile_max ?? 0,
+    standardDeviation: data.standardDeviation ?? data.standard_deviation ?? 0,
+    monthlyPercentiles: (data.monthlyPercentiles ?? data.monthly_percentiles ?? []).map((point: any) => ({
+      monthIndex: point.monthIndex ?? point.month_index ?? 0,
+      age: point.age ?? 0,
+      percentileMin: point.percentileMin ?? point.percentile_min ?? 0,
+      percentile10: point.percentile10 ?? point.percentile_10 ?? 0,
+      percentile50: point.percentile50 ?? point.percentile_50 ?? 0,
+      percentile90: point.percentile90 ?? point.percentile_90 ?? 0,
+      percentileMax: point.percentileMax ?? point.percentile_max ?? 0,
+      cumulativeContribution: point.cumulativeContribution ?? point.cumulative_contribution ?? 0,
     })),
   };
 }
@@ -216,30 +259,30 @@ function buildMonteCarloResultFromApi(data: any): MonteCarloResult {
  */
 function buildRetirementMonteCarloResultFromApi(data: any): RetirementMonteCarloResult {
   return {
-    iterations: data.iterations,
-    confidenceLevel: data.confidence_level,
-    toleranceRatio: data.tolerance_ratio,
-    confidenceReached: data.confidence_reached,
-    errorMargin: data.error_margin,
-    errorMarginRatio: data.error_margin_ratio,
-    meanFinalCapital: data.mean_final_capital,
-    medianFinalCapital: data.median_final_capital,
-    percentile10: data.percentile_10,
-    percentile50: data.percentile_50,
-    percentile90: data.percentile_90,
-    percentileMin: data.percentile_min,
-    percentileMax: data.percentile_max,
-    standardDeviation: data.standard_deviation,
-    monthlyPercentiles: (data.monthly_percentiles ?? []).map((point: any) => ({
-      monthIndex: point.month_index,
-      age: point.age,
-      monthlyWithdrawal: point.monthly_withdrawal,
-      cumulativeWithdrawal: point.cumulative_withdrawal,
-      percentileMin: point.percentile_min,
-      percentile10: point.percentile_10,
-      percentile50: point.percentile_50,
-      percentile90: point.percentile_90,
-      percentileMax: point.percentile_max,
+    iterations: data.iterations ?? 0,
+    confidenceLevel: data.confidenceLevel ?? data.confidence_level ?? 0.9,
+    toleranceRatio: data.toleranceRatio ?? data.tolerance_ratio ?? 0.01,
+    confidenceReached: data.confidenceReached ?? data.confidence_reached ?? false,
+    errorMargin: data.errorMargin ?? data.error_margin ?? 0,
+    errorMarginRatio: data.errorMarginRatio ?? data.error_margin_ratio ?? 0,
+    meanFinalCapital: data.meanFinalCapital ?? data.mean_final_capital ?? 0,
+    medianFinalCapital: data.medianFinalCapital ?? data.median_final_capital ?? 0,
+    percentile10: data.percentile10 ?? data.percentile_10 ?? 0,
+    percentile50: data.percentile50 ?? data.percentile_50 ?? 0,
+    percentile90: data.percentile90 ?? data.percentile_90 ?? 0,
+    percentileMin: data.percentileMin ?? data.percentile_min ?? 0,
+    percentileMax: data.percentileMax ?? data.percentile_max ?? 0,
+    standardDeviation: data.standardDeviation ?? data.standard_deviation ?? 0,
+    monthlyPercentiles: (data.monthlyPercentiles ?? data.monthly_percentiles ?? []).map((point: any) => ({
+      monthIndex: point.monthIndex ?? point.month_index ?? 0,
+      age: point.age ?? 0,
+      monthlyWithdrawal: point.monthlyWithdrawal ?? point.monthly_withdrawal ?? 0,
+      cumulativeWithdrawal: point.cumulativeWithdrawal ?? point.cumulative_withdrawal ?? 0,
+      percentileMin: point.percentileMin ?? point.percentile_min ?? 0,
+      percentile10: point.percentile10 ?? point.percentile_10 ?? 0,
+      percentile50: point.percentile50 ?? point.percentile_50 ?? 0,
+      percentile90: point.percentile90 ?? point.percentile_90 ?? 0,
+      percentileMax: point.percentileMax ?? point.percentile_max ?? 0,
     })),
   };
 }
@@ -248,6 +291,33 @@ function buildRetirementMonteCarloResultFromApi(data: any): RetirementMonteCarlo
  * Construit les résultats des scénarios de retraite depuis la réponse API.
  */
 function buildRetirementScenarioResultsFromApi(data: any): RetirementScenarioResults {
+  if (!data.pessimistic || !data.median || !data.optimistic) {
+    console.error("Réponse API invalide : scénarios de retraite manquants", data);
+    // Retourner des valeurs par défaut pour éviter un crash
+    const defaultResult: RetirementMonteCarloResult = {
+      iterations: 0,
+      confidenceLevel: 0.9,
+      toleranceRatio: 0.01,
+      confidenceReached: false,
+      errorMargin: 0,
+      errorMarginRatio: 0,
+      meanFinalCapital: 0,
+      medianFinalCapital: 0,
+      percentile10: 0,
+      percentile50: 0,
+      percentile90: 0,
+      percentileMin: 0,
+      percentileMax: 0,
+      standardDeviation: 0,
+      monthlyPercentiles: [],
+    };
+    return {
+      pessimistic: data.pessimistic ? buildRetirementMonteCarloResultFromApi(data.pessimistic) : defaultResult,
+      median: data.median ? buildRetirementMonteCarloResultFromApi(data.median) : defaultResult,
+      optimistic: data.optimistic ? buildRetirementMonteCarloResultFromApi(data.optimistic) : defaultResult,
+    };
+  }
+  
   return {
     pessimistic: buildRetirementMonteCarloResultFromApi(data.pessimistic),
     median: buildRetirementMonteCarloResultFromApi(data.median),
@@ -259,10 +329,11 @@ function buildRetirementScenarioResultsFromApi(data: any): RetirementScenarioRes
  * Crée une nouvelle simulation sauvegardée.
  * 
  * @param simulation - Données de la simulation à créer
+ * @param projectId - ID du projet optionnel à associer à la simulation
  * @returns Simulation créée avec son ID
  */
-export async function createSimulation(simulation: SimulationInput): Promise<Simulation> {
-  const response = await apiClient.post<Simulation>("/simulations/", mapSimulationInputToApi(simulation));
+export async function createSimulation(simulation: SimulationInput, projectId?: number): Promise<Simulation> {
+  const response = await apiClient.post<Simulation>("/simulations/", mapSimulationInputToApi(simulation, projectId));
   return response.data;
 }
 
@@ -285,6 +356,57 @@ export async function listSimulations(): Promise<Simulation[]> {
 export async function fetchSimulation(simulationId: number): Promise<Simulation> {
   const response = await apiClient.get<Simulation>(`/simulations/${simulationId}`);
   return response.data;
+}
+
+/**
+ * Met à jour une simulation existante.
+ * 
+ * @param simulationId - Identifiant de la simulation
+ * @param simulation - Données de mise à jour
+ * @param projectId - ID du projet optionnel
+ * @returns Simulation mise à jour
+ */
+export async function updateSimulation(
+  simulationId: number,
+  simulation: SimulationInput,
+  projectId?: number,
+): Promise<Simulation> {
+  // Pour la mise à jour, on n'envoie que les champs modifiables
+  // (pas current_age et retirement_age qui sont fixes)
+  const apiData = mapSimulationInputToApi(simulation, projectId);
+  
+  // Créer l'objet de mise à jour sans current_age et retirement_age
+  const updateData: any = {
+    name: apiData.name,
+    target_monthly_income: apiData.target_monthly_income,
+    state_pension_monthly_income: apiData.state_pension_monthly_income,
+    housing_loan_end_age: apiData.housing_loan_end_age,
+    dependents_departure_age: apiData.dependents_departure_age,
+    additional_income_streams: apiData.additional_income_streams,
+    inputs_snapshot: apiData.inputs_snapshot,
+  };
+  
+  if (projectId !== undefined) {
+    updateData.project_id = projectId;
+  }
+  
+  console.log("Mise à jour de la simulation avec:", {
+    simulationId,
+    projectId,
+    hasInputsSnapshot: !!updateData.inputs_snapshot,
+  });
+  
+  const response = await apiClient.put<Simulation>(`/simulations/${simulationId}`, updateData);
+  return response.data;
+}
+
+/**
+ * Supprime une simulation.
+ * 
+ * @param simulationId - Identifiant de la simulation
+ */
+export async function deleteSimulation(simulationId: number): Promise<void> {
+  await apiClient.delete(`/simulations/${simulationId}`);
 }
 
 /**
@@ -472,22 +594,51 @@ export async function optimizeSavingsPlan(
   const response = await apiClient.post("/simulations/recommended-savings", payload);
 
   const data = response.data;
-    return {
-      scale: data.scale,
-      recommendedMonthlySavings: data.recommended_monthly_savings,
-      minimumCapitalAtRetirement: data.minimum_capital_at_retirement ?? 0,
-      monteCarloResult: buildMonteCarloResultFromApi(data.monte_carlo_result),
-      retirementResults: buildRetirementScenarioResultsFromApi(data.retirement_results),
-      steps: (data.steps ?? []).map((step: any) => ({
-        iteration: step.iteration,
-        scale: step.scale,
-        monthlySavings: step.monthly_savings,
-        finalCapital: step.final_capital,
-        effectiveFinalCapital: step.effective_final_capital,
-        depletionMonths: step.depletion_months,
-      })),
-      residualError: data.residual_error,
-      residualErrorRatio: data.residual_error_ratio,
-    };
+  
+  // Gérer les deux formats : camelCase et snake_case
+  const monteCarloData = data.monteCarloResult || data.monte_carlo_result;
+  const retirementData = data.retirementResults || data.retirement_results;
+  const recommendedSavings = data.recommendedMonthlySavings ?? data.recommended_monthly_savings ?? 0;
+  const minCapital = data.minimumCapitalAtRetirement ?? data.minimum_capital_at_retirement ?? 0;
+  const residualErr = data.residualError ?? data.residual_error ?? 0;
+  const residualErrRatio = data.residualErrorRatio ?? data.residual_error_ratio ?? 0;
+  
+  // Debug : afficher la structure de la réponse
+  console.log("Réponse API d'optimisation reçue:", {
+    hasMonteCarloResult: !!monteCarloData,
+    hasRetirementResults: !!retirementData,
+    scale: data.scale,
+    recommendedMonthlySavings: recommendedSavings,
+    keysInData: Object.keys(data),
+  });
+  
+  // Vérifier que les données requises sont présentes
+  if (!monteCarloData) {
+    console.error("Réponse API invalide : monteCarloResult/monte_carlo_result manquant. Données complètes:", JSON.stringify(data, null, 2));
+    throw new Error("Réponse API invalide : données Monte Carlo manquantes.");
+  }
+  
+  if (!retirementData) {
+    console.error("Réponse API invalide : retirementResults/retirement_results manquant. Données complètes:", JSON.stringify(data, null, 2));
+    throw new Error("Réponse API invalide : données de retraite manquantes.");
+  }
+  
+  return {
+    scale: data.scale ?? 1.0,
+    recommendedMonthlySavings: recommendedSavings,
+    minimumCapitalAtRetirement: minCapital,
+    monteCarloResult: buildMonteCarloResultFromApi(monteCarloData),
+    retirementResults: buildRetirementScenarioResultsFromApi(retirementData),
+    steps: (data.steps ?? []).map((step: any) => ({
+      iteration: step.iteration ?? 0,
+      scale: step.scale ?? 0,
+      monthlySavings: step.monthly_savings ?? step.monthlySavings ?? 0,
+      finalCapital: step.final_capital ?? step.finalCapital ?? 0,
+      effectiveFinalCapital: step.effective_final_capital ?? step.effectiveFinalCapital ?? 0,
+      depletionMonths: step.depletion_months ?? step.depletionMonths ?? 0,
+    })),
+    residualError: residualErr,
+    residualErrorRatio: residualErrRatio,
+  };
 }
 

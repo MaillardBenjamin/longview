@@ -37,6 +37,31 @@
   gap: 1.5rem;
 }
 
+.layout__context {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  margin: 0 1rem;
+}
+
+.layout__context-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.layout__context-label {
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.layout__context-value {
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
 .layout__nav-link {
   color: #e2e8f0;
   text-decoration: none;
@@ -128,6 +153,13 @@
   .layout__nav {
     flex-wrap: wrap;
     justify-content: center;
+  }
+
+  .layout__context {
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+    font-size: 0.8rem;
   }
 
   .layout__main {

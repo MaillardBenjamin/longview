@@ -61,3 +61,31 @@ export async function fetchCurrentUser(): Promise<User> {
   return response.data;
 }
 
+export interface UpdateUserPayload {
+  email?: string;
+  fullName?: string;
+  password?: string;
+}
+
+/**
+ * Met à jour les informations de l'utilisateur actuellement authentifié.
+ * 
+ * @param payload - Données de mise à jour (email, fullName, password)
+ * @returns Utilisateur mis à jour
+ */
+export async function updateUser(payload: UpdateUserPayload): Promise<User> {
+  const updateData: any = {};
+  if (payload.email !== undefined) {
+    updateData.email = payload.email;
+  }
+  if (payload.fullName !== undefined) {
+    updateData.full_name = payload.fullName;
+  }
+  if (payload.password !== undefined) {
+    updateData.password = payload.password;
+  }
+  
+  const response = await apiClient.put<User>("/auth/me", updateData);
+  return response.data;
+}
+

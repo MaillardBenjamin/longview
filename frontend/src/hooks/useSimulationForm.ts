@@ -4,7 +4,7 @@
  * Centralise la logique de gestion des données du formulaire multi-étapes.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type {
   AdditionalIncome,
   AdultProfile,
@@ -179,7 +179,9 @@ export function useSimulationForm() {
       const saved = sessionStorage.getItem("lv_simulation_form_data");
       if (saved) {
         try {
-          return JSON.parse(saved) as SimulationInput;
+          const parsed = JSON.parse(saved) as SimulationInput;
+          console.log("Données restaurées depuis sessionStorage (initialisation):", parsed);
+          return parsed;
         } catch (error) {
           console.warn("Impossible de restaurer le formulaire depuis le stockage de session.", error);
         }
@@ -188,11 +190,52 @@ export function useSimulationForm() {
     return initialFormState;
   });
 
+  // Fonction pour forcer le rechargement depuis sessionStorage
+  const reloadFromStorage = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("lv_simulation_form_data");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as SimulationInput;
+          console.log("Rechargement forcé des données depuis sessionStorage:", parsed);
+          console.log("Détails - Adults:", parsed.adults?.length, "Children:", parsed.children?.length);
+          console.log("SavingsPhases:", parsed.savingsPhases?.length);
+          console.log("HouseholdCharges:", parsed.householdCharges?.length);
+          setFormData(parsed);
+        } catch (error) {
+          console.warn("Impossible de recharger le formulaire depuis le stockage de session.", error);
+        }
+      } else {
+        console.warn("Aucune donnée trouvée dans sessionStorage pour rechargement");
+      }
+    }
+  }, []);
+
+  // Écouter les changements dans sessionStorage (pour recharger après navigation)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "lv_simulation_form_data" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue) as SimulationInput;
+          console.log("Changement détecté dans sessionStorage, rechargement...", parsed);
+          setFormData(parsed);
+        } catch (error) {
+          console.warn("Erreur lors du rechargement depuis storage event:", error);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
   // Sauvegarder l'état dans sessionStorage à chaque modification
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem("lv_simulation_form_data", JSON.stringify(formData));
+        // Notifier les autres composants du changement
+        window.dispatchEvent(new CustomEvent("simulationFormDataChanged", { detail: formData }));
       } catch (error) {
         console.warn("Impossible de sauvegarder le formulaire dans le stockage de session.", error);
       }
@@ -389,6 +432,7 @@ export function useSimulationForm() {
   return {
     formData,
     updateFormData,
+    reloadFromStorage,
     updateAdult,
     addAdult,
     removeAdult,

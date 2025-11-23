@@ -1,6 +1,9 @@
-import { Link, NavLink } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Logo } from "@/components/shared/Logo";
+import { fetchProject } from "@/services/projects";
 import "./PrimaryLayout.css";
 
 const navLinks = [
@@ -11,6 +14,121 @@ const navLinks = [
 
 export function PrimaryLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [currentProjectName, setCurrentProjectName] = useState<string | null>(null);
+  const [currentSimulationName, setCurrentSimulationName] = useState<string | null>(null);
+
+  // Récupérer le projet courant depuis sessionStorage
+  const currentProjectId = typeof window !== "undefined" 
+    ? sessionStorage.getItem("lv_current_project_id")
+    : null;
+
+  // Récupérer le projet si un ID est disponible
+  const { data: currentProject } = useQuery({
+    queryKey: ["project", currentProjectId],
+    queryFn: () => fetchProject(Number(currentProjectId!)),
+    enabled: !!currentProjectId && !!user,
+  });
+
+  // Mettre à jour le nom du projet
+  useEffect(() => {
+    if (currentProject && user) {
+      setCurrentProjectName(currentProject.name);
+    } else {
+      setCurrentProjectName(null);
+    }
+  }, [currentProject, user]);
+
+  // Nettoyer les informations du projet/simulation quand l'utilisateur se déconnecte
+  useEffect(() => {
+    if (!user) {
+      setCurrentProjectName(null);
+      setCurrentSimulationName(null);
+    }
+  }, [user]);
+
+  // Récupérer le nom de la simulation depuis sessionStorage
+  useEffect(() => {
+    if (!user) {
+      setCurrentSimulationName(null);
+      return;
+    }
+
+    const updateSimulationName = () => {
+      if (typeof window !== "undefined" && user) {
+        const saved = sessionStorage.getItem("lv_simulation_form_data");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            console.log("PrimaryLayout - Simulation name from sessionStorage:", parsed.name);
+            if (parsed.name && parsed.name !== "Projet LongView") {
+              setCurrentSimulationName(parsed.name);
+            } else {
+              setCurrentSimulationName(null);
+            }
+          } catch (error) {
+            console.error("PrimaryLayout - Error parsing simulation data:", error);
+            setCurrentSimulationName(null);
+          }
+        } else {
+          setCurrentSimulationName(null);
+        }
+      } else {
+        setCurrentSimulationName(null);
+      }
+    };
+
+    updateSimulationName();
+    
+    // Écouter les changements via CustomEvent (même onglet)
+    const handleFormDataChange = () => {
+      if (user) {
+        updateSimulationName();
+      }
+    };
+    
+    // Écouter les changements dans sessionStorage (autres onglets)
+    const handleStorageChange = () => {
+      if (user) {
+        updateSimulationName();
+      }
+    };
+    
+    window.addEventListener("simulationFormDataChanged", handleFormDataChange);
+    window.addEventListener("storage", handleStorageChange);
+    // Vérifier périodiquement (backup)
+    const interval = setInterval(() => {
+      if (user) {
+        updateSimulationName();
+      }
+    }, 2000);
+    
+    return () => {
+      window.removeEventListener("simulationFormDataChanged", handleFormDataChange);
+      window.removeEventListener("storage", handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [user, location.pathname]); // Se déclencher aussi quand la route change
+
+  // Fermer le menu si on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    if (menuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [menuOpen]);
 
   return (
     <div className="layout">
@@ -29,18 +147,133 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
             </NavLink>
           ))}
         </nav>
+        {(currentProjectName || currentSimulationName) && (
+          <div className="layout__context">
+            {currentProjectName && (
+              <span className="layout__context-item">
+                <span className="layout__context-label">Projet:</span>
+                <span className="layout__context-value">{currentProjectName}</span>
+              </span>
+            )}
+            {currentSimulationName && (
+              <span className="layout__context-item">
+                <span className="layout__context-label">Simulation:</span>
+                <span className="layout__context-value">{currentSimulationName}</span>
+              </span>
+            )}
+          </div>
+        )}
         <div className="layout__auth">
           {user ? (
             <>
-              <span className="layout__user">{user.fullName ?? user.email}</span>
-              <button className="layout__button" onClick={logout}>
-                Déconnexion
-              </button>
+              <Link to="/projects" className="layout__nav-link" style={{ marginRight: "1rem" }}>
+                Mes projets
+              </Link>
+              <div
+                ref={menuRef}
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setMenuOpen(true)}
+                onMouseLeave={() => setMenuOpen(false)}
+              >
+                <span
+                  className="layout__user"
+                  style={{
+                    cursor: "pointer",
+                    padding: "0.5rem 1rem",
+                    borderRadius: "4px",
+                    transition: "background-color 0.2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  {user.fullName ?? user.email}
+                </span>
+                {menuOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      right: 0,
+                      marginTop: "0.5rem",
+                      backgroundColor: "white",
+                      borderRadius: "8px",
+                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)",
+                      minWidth: "200px",
+                      zIndex: 1000,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Link
+                      to="/profile"
+                      style={{
+                        display: "block",
+                        padding: "0.75rem 1rem",
+                        textDecoration: "none",
+                        color: "#333",
+                        transition: "background-color 0.2s",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "#f5f5f5";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "white";
+                      }}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Mon profil
+                    </Link>
+                    <div
+                      style={{
+                        height: "1px",
+                        backgroundColor: "#e0e0e0",
+                        margin: "0.25rem 0",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        logout();
+                        navigate("/");
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "0.75rem 1rem",
+                        border: "none",
+                        backgroundColor: "transparent",
+                        color: "#d32f2f",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        transition: "background-color 0.2s",
+                        fontFamily: "inherit",
+                        fontSize: "inherit",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "#ffebee";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
+                      Déconnexion
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
-            <Link to="/simulation" className="layout__button">
-              Créer mon compte
-            </Link>
+            <>
+              <Link to="/login" className="layout__button" style={{ marginRight: "0.5rem" }}>
+                Connexion
+              </Link>
+              <Link to="/register" className="layout__button">
+                Créer un compte
+              </Link>
+            </>
           )}
         </div>
       </header>

@@ -84,9 +84,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Déconnecte l'utilisateur et supprime le token.
+   * Nettoie également toutes les données de session.
    */
   const logout = useCallback(() => {
     localStorage.removeItem("lv_token");
+    // Nettoyer sessionStorage
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("lv_simulation_form_data");
+      sessionStorage.removeItem("lv_simulation_active_step");
+      sessionStorage.removeItem("lv_current_project_id");
+      sessionStorage.removeItem("lv_current_simulation_id");
+    }
     setUser(null);
     setToken(null);
   }, []);

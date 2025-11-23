@@ -7,6 +7,7 @@
 
 import { PrimaryLayout } from "@/components/layout/PrimaryLayout";
 import { CookieBanner } from "@/components/shared/CookieBanner";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { HomePage } from "@/pages/HomePage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
 import { SimulationResultPage } from "@/pages/SimulationResultPage";
@@ -15,6 +16,11 @@ import { MentionsLegalesPage } from "@/pages/MentionsLegalesPage";
 import { PrivacyPage } from "@/pages/PrivacyPage";
 import { CookiesPage } from "@/pages/CookiesPage";
 import { AboutPage } from "@/pages/AboutPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { RegisterPage } from "@/pages/RegisterPage";
+import { ProjectsPage } from "@/pages/ProjectsPage";
+import { ProjectDetailPage } from "@/pages/ProjectDetailPage";
+import { ProfilePage } from "@/pages/ProfilePage";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import "./App.css";
@@ -26,6 +32,32 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/simulation" element={<OnboardingPage />} />
         <Route path="/resultats" element={<SimulationResultPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route
+          path="/projects"
+          element={
+            <ProtectedRoute>
+              <ProjectsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/projects/:projectId"
+          element={
+            <ProtectedRoute>
+              <ProjectDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/a-propos" element={<AboutPage />} />
         <Route path="/cgu" element={<CGUPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
