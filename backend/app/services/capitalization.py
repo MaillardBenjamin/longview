@@ -157,14 +157,10 @@ def _active_monthly_contribution(
         for account in accounts
     )
 
-    # Si des contributions explicites existent, elles ont la priorité
-    if explicit_total > 0:
-        # Mais seulement si une phase est active (ou s'il n'y a pas de phases)
-        if phases_list and not has_active_phase:
-            return 0.0
-        return explicit_total
-
-    return phase_total
+    # Utiliser UNIQUEMENT les contributions explicites
+    # Si toutes les cotisations sont à 0, considérer la contribution totale à 0
+    # Ne JAMAIS utiliser la phase d'épargne
+    return explicit_total
 
 
 def _distribute_contributions(
@@ -178,13 +174,17 @@ def _distribute_contributions(
     2. Parts de contribution (en pourcentage)
     3. Répartition égale
 
+    Vérifie également les limites de versement pour chaque compte.
+
     Args:
         accounts: Liste des comptes avec leur état
         total_contribution: Contribution totale à répartir
 
     Returns:
-        Liste des contributions par compte
+        Liste des contributions par compte (limitées par les plafonds)
     """
+    from app.services.taxation import check_deposit_limit
+
     if not accounts:
         return []
 
@@ -198,24 +198,97 @@ def _distribute_contributions(
     explicit_total = sum(explicit_amounts)
 
     if explicit_total > 0:
-        # Mise à l'échelle pour correspondre à la contribution totale
-        scale = total_contribution / explicit_total if explicit_total > 0 else 0.0
-        return [amount * scale for amount in explicit_amounts]
+        # IMPORTANT: On utilise UNIQUEMENT explicit_total, jamais plus
+        # Si total_contribution > explicit_total, on ignore le surplus
+        # (cela garantit qu'on n'utilise que les contributions explicites)
+        actual_total = min(total_contribution, explicit_total)
+        
+        # Mise à l'échelle pour correspondre à actual_total (jamais plus que explicit_total)
+        scale = actual_total / explicit_total if explicit_total > 0 else 0.0
+        proposed = [amount * scale for amount in explicit_amounts]
+        
+        # Log de diagnostic (premier appel seulement, via un flag module)
+        import logging
+        logger = logging.getLogger(__name__)
+        if not hasattr(_distribute_contributions, '_logged'):
+            logger.info("=== DISTRIBUTION CONTRIBUTIONS ===")
+            logger.info("  total_contribution=%.2f €, explicit_total=%.2f €, scale=%.4f", 
+                       total_contribution, explicit_total, scale)
+            for i, (state, prop) in enumerate(zip(accounts, proposed)):
+                explicit = state.account.monthly_contribution or 0.0
+                account_type = state.account.type.value if hasattr(state.account.type, "value") else str(state.account.type)
+                logger.info("  Compte %d (%s): explicit=%.2f €, proposed=%.2f €", 
+                           i+1, account_type, explicit, prop)
+            _distribute_contributions._logged = True
+    else:
+        # Priorité 2 : parts de contribution
+        share_sum = sum(
+            (state.account.monthly_contribution_share or 0.0) for state in accounts
+        )
+        if share_sum > 0:
+            proposed = [
+                total_contribution
+                * ((state.account.monthly_contribution_share or 0.0) / share_sum)
+                for state in accounts
+            ]
+        else:
+            # Priorité 3 : répartition égale uniquement entre les comptes éligibles
+            # On arrive ici uniquement s'il n'y a PAS de contributions explicites
+            # Un compte est éligible s'il n'est pas au plafond
+            # Note: on ne vérifie PAS explicit_contribution == 0 car on est déjà dans le cas
+            # où il n'y a pas de contributions explicites (donc tous sont à 0)
+            eligible_indices = []
+            for i, state in enumerate(accounts):
+                # Vérifier si le compte peut recevoir une contribution (pas au plafond)
+                is_valid, _ = check_deposit_limit(state.account, state.balance, 1.0)
+                if is_valid:
+                    eligible_indices.append(i)
+            
+            if eligible_indices:
+                equal = total_contribution / len(eligible_indices)
+                proposed = [
+                    equal if i in eligible_indices else 0.0
+                    for i in range(len(accounts))
+                ]
+            else:
+                # Aucun compte éligible, pas de répartition
+                proposed = [0.0 for _ in accounts]
 
-    # Priorité 2 : parts de contribution
-    share_sum = sum(
-        (state.account.monthly_contribution_share or 0.0) for state in accounts
-    )
-    if share_sum > 0:
-        return [
-            total_contribution
-            * ((state.account.monthly_contribution_share or 0.0) / share_sum)
-            for state in accounts
-        ]
+    # Vérification des limites de versement et ajustement si nécessaire
+    final_contributions = []
+    remaining = total_contribution
 
-    # Priorité 3 : répartition égale
-    equal = total_contribution / len(accounts)
-    return [equal for _ in accounts]
+    for i, (state, proposed_amount) in enumerate(zip(accounts, proposed)):
+        explicit_contribution = state.account.monthly_contribution or 0.0
+        
+        # Si le compte a une contribution explicite de 0, ne rien verser
+        # (même s'il y a un surplus de phase d'épargne)
+        if explicit_contribution == 0.0:
+            final_contributions.append(0.0)
+            continue
+
+        if proposed_amount <= 0:
+            final_contributions.append(0.0)
+            continue
+
+        # Vérification de la limite de versement
+        is_valid, allowed_amount = check_deposit_limit(
+            state.account, state.balance, proposed_amount
+        )
+
+        if is_valid:
+            # Le versement est autorisé, on prend le montant proposé ou autorisé
+            actual = min(proposed_amount, allowed_amount)
+            final_contributions.append(actual)
+            remaining -= actual
+        else:
+            # Le compte est au plafond, pas de versement
+            final_contributions.append(0.0)
+
+    # Si des versements ont été limités, on peut redistribuer le reste
+    # (optionnel, pour l'instant on laisse tel quel)
+
+    return final_contributions
 
 
 def _account_monthly_return(
@@ -294,7 +367,13 @@ def _account_tax_rate(account: InvestmentAccount) -> float:
     Taux de fiscalité selon le type de compte :
     - PEA/PER : 17.2% (flat tax)
     - Crypto/CTO : 30% (flat tax)
+    - Livrets : 0% (exonérés d'impôt et de prélèvements sociaux)
+    - Assurance-vie : 0% (fiscalité différée, calculée lors des retraits)
     - Autres : 0% (fiscalité différée ou exonérée)
+
+    Note: Cette fonction retourne le taux de fiscalité immédiate.
+    Pour l'assurance-vie et les livrets, la fiscalité est calculée différemment
+    lors des retraits (voir taxation.py).
 
     Args:
         account: Compte d'investissement
@@ -306,7 +385,9 @@ def _account_tax_rate(account: InvestmentAccount) -> float:
         return 0.172  # Flat tax 17.2%
     if account.type in {"crypto", "cto"}:
         return 0.30  # Flat tax 30%
-    return 0.0  # Pas de fiscalité immédiate (ex: assurance-vie, livrets)
+    # Livrets : exonérés (0% d'impôt, 0% de PS)
+    # Assurance-vie : fiscalité différée (calculée lors des retraits selon ancienneté)
+    return 0.0
 
 
 def _asset_expected_return(asset_classes: dict, key: str) -> float:

@@ -6,6 +6,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SEO, createWebPageSchema } from "@/components/seo/SEO";
 import {
   Box,
   Button,
@@ -31,9 +32,11 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useSimulationForm } from "@/hooks/useSimulationForm";
-import { optimizeSavingsPlan, createSimulation, updateSimulation } from "@/services/simulations";
+import { optimizeSavingsPlan, createSimulation, updateSimulation, type ProgressEvent } from "@/services/simulations";
+import { ProgressIndicator } from "@/components/shared/ProgressIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchProjects, createProject, updateProject } from "@/services/projects";
+import { useNotifications } from "@/hooks/useNotifications";
 import { PersonalInfoStep } from "@/components/onboarding/PersonalInfoStep";
 import { RetirementGoalsStep } from "@/components/onboarding/RetirementGoalsStep";
 import { SavingsStep } from "@/components/onboarding/SavingsStep";
@@ -41,6 +44,7 @@ import { ChargesStep } from "@/components/onboarding/ChargesStep";
 import { SpendingProfileStep } from "@/components/onboarding/SpendingProfileStep";
 import { MarketAssumptionsStep } from "@/components/onboarding/MarketAssumptionsStep";
 import { SummaryStep } from "@/components/onboarding/SummaryStep";
+import { QuickStartGuide } from "@/components/shared/QuickStartGuide";
 
 const steps = [
   "Informations personnelles",
@@ -56,6 +60,7 @@ export function OnboardingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { showWarning, showError } = useNotifications();
   const currentProjectIdRef = useRef<number | null>(null);
   const currentSimulationIdRef = useRef<number | null>(null);
   
@@ -68,6 +73,20 @@ export function OnboardingPage() {
     return saved === "true";
   });
   const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
+  const [progress, setProgress] = useState<ProgressEvent | null>(null);
+  const [capitalizationOnly, setCapitalizationOnly] = useState(() => {
+    const saved = sessionStorage.getItem("lv_capitalization_only");
+    return saved === "true";
+  });
+  const [calculateMinimumSavings, setCalculateMinimumSavings] = useState(() => {
+    const saved = sessionStorage.getItem("lv_calculate_minimum_savings");
+    return saved !== "false"; // Par défaut true
+  });
+  const [showQuickStartGuide, setShowQuickStartGuide] = useState(() => {
+    // Afficher le guide uniquement si l'utilisateur n'a pas choisi de ne plus l'afficher
+    const dontShow = localStorage.getItem("lv_dont_show_quick_start_guide");
+    return !dontShow;
+  });
 
   // Récupérer les données du formulaire AVANT les useEffect qui les utilisent
   const {
@@ -232,7 +251,15 @@ export function OnboardingPage() {
   }, [formData, activeStep, user]);
 
   const optimizeMutation = useMutation({
-    mutationFn: optimizeSavingsPlan,
+    mutationFn: (simulation: Parameters<typeof optimizeSavingsPlan>[0]) => 
+      optimizeSavingsPlan(simulation, (progressEvent) => {
+        console.log("Mise à jour de la progression dans OnboardingPage:", {
+          progress_percent: progressEvent.progress_percent,
+          current_step: progressEvent.current_step,
+          message: progressEvent.message,
+        });
+        setProgress(progressEvent);
+      }, capitalizationOnly, calculateMinimumSavings),
     onSuccess: async (result) => {
       console.log("Résultat de l'optimisation reçu:", {
         scale: result.scale,
@@ -270,7 +297,10 @@ export function OnboardingPage() {
             response: error?.response?.data,
             status: error?.response?.status,
           });
-          // On continue même si la création échoue
+          // Afficher un avertissement mais continuer quand même
+          showWarning(
+            "La simulation a été calculée mais n'a pas pu être sauvegardée. Les résultats sont toujours disponibles.",
+          );
         }
       } else {
         console.log("Utilisateur non connecté - simulation non sauvegardée");
@@ -298,6 +328,12 @@ export function OnboardingPage() {
         response: error?.response?.data,
         status: error?.response?.status,
       });
+      
+      // Afficher une notification d'erreur à l'utilisateur
+      const errorMessage = error?.response?.data?.detail || 
+                          error?.message || 
+                          "Une erreur est survenue lors du calcul de la simulation. Veuillez réessayer.";
+      showError(errorMessage);
     },
   });
 
@@ -315,12 +351,13 @@ export function OnboardingPage() {
     event.preventDefault();
 
     if (!cguAccepted) {
-      window.alert(
+      showWarning(
         "Vous devez accepter les Conditions Générales d'Utilisation pour lancer la simulation.",
       );
       return;
     }
 
+    setProgress(null); // Réinitialiser la progression
     optimizeMutation.mutate(formData);
   };
 
@@ -399,8 +436,29 @@ export function OnboardingPage() {
 
   const currentProject = projects?.find((p) => p.id === currentProjectId);
 
+  const structuredData = createWebPageSchema(
+    "Simulation de retraite - LongView",
+    "Créez votre simulation de retraite personnalisée. Remplissez le formulaire étape par étape pour obtenir des projections détaillées avec Monte Carlo.",
+    typeof window !== "undefined" ? window.location.href : "https://longview.app/simulation",
+  );
+
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <>
+      <SEO
+        title="Simulation de retraite"
+        description="Créez votre simulation de retraite personnalisée. Remplissez le formulaire étape par étape pour obtenir des projections détaillées avec Monte Carlo et optimiser votre épargne."
+        keywords="simulation retraite, formulaire retraite, projection Monte Carlo, optimisation épargne, calcul retraite personnalisé"
+        structuredData={structuredData}
+      />
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <QuickStartGuide
+        open={showQuickStartGuide}
+        onClose={() => setShowQuickStartGuide(false)}
+        onDontShowAgain={() => {
+          localStorage.setItem("lv_dont_show_quick_start_guide", "true");
+          setShowQuickStartGuide(false);
+        }}
+      />
       <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
         <Box sx={{ mb: 3 }}>
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
@@ -479,6 +537,38 @@ export function OnboardingPage() {
                 <FormControlLabel
                   control={
                     <Checkbox
+                      checked={capitalizationOnly}
+                      onChange={(e) => {
+                        setCapitalizationOnly(e.target.checked);
+                        sessionStorage.setItem("lv_capitalization_only", String(e.target.checked));
+                      }}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2">
+                      Simuler uniquement la phase de capitalisation (sans la phase de retraite)
+                    </Typography>
+                  }
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={calculateMinimumSavings}
+                      onChange={(e) => {
+                        setCalculateMinimumSavings(e.target.checked);
+                        sessionStorage.setItem("lv_calculate_minimum_savings", String(e.target.checked));
+                      }}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2">
+                      Calculer l'épargne minimum nécessaire (optimisation)
+                    </Typography>
+                  }
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
                       checked={cguAccepted}
                       onChange={(e) => {
                         setCguAccepted(e.target.checked);
@@ -519,11 +609,23 @@ export function OnboardingPage() {
             )}
           </Box>
 
-          {optimizeMutation.isPending && (
+          {optimizeMutation.isPending && progress && (
+            <Box sx={{ mt: 2 }}>
+              <ProgressIndicator
+                progressPercent={progress.progress_percent}
+                currentStep={progress.current_step}
+                stepDescription={progress.step_description}
+                message={progress.message}
+                isComplete={progress.is_complete}
+                error={progress.error}
+              />
+            </Box>
+          )}
+          {optimizeMutation.isPending && !progress && (
             <Box sx={{ mt: 2 }}>
               <LinearProgress />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: "center" }}>
-                Calcul de l'épargne optimale en cours... Cela peut prendre quelques instants.
+                Démarrage du calcul...
               </Typography>
             </Box>
           )}
@@ -540,5 +642,6 @@ export function OnboardingPage() {
         </Box>
       </Paper>
     </Container>
+    </>
   );
 }

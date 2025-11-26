@@ -12,9 +12,16 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  FormHelperText,
+  Tooltip,
+  IconButton,
 } from "@mui/material";
 import Grid from "@mui/material/GridLegacy";
-import { ExpandMore } from "@mui/icons-material";
+import { ExpandMore, HelpOutline } from "@mui/icons-material";
 import type { AssetClassKey, SimulationInput } from "@/types/simulation";
 
 const assetClassLabels: Record<AssetClassKey, string> = {
@@ -85,36 +92,80 @@ export function MarketAssumptionsStep({ formData, updateFormData }: MarketAssump
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Inflation moyenne annuelle (%)"
-            type="number"
-            value={market?.inflationMean ?? 2}
-            onChange={(e) =>
-              updateFormData({
-                marketAssumptions: {
-                  ...market!,
-                  inflationMean: parseFloat(e.target.value) || 0,
-                },
-              })
-            }
-          />
+          <Box sx={{ position: "relative" }}>
+            <Tooltip
+              title="Taux d'inflation annuel moyen attendu. La BCE cible 2% d'inflation. Historiquement, l'inflation en France a été d'environ 2% par an sur le long terme."
+              arrow
+              placement="top"
+            >
+              <IconButton
+                size="small"
+                sx={{
+                  position: "absolute",
+                  right: 4,
+                  top: 4,
+                  zIndex: 1,
+                  color: "text.secondary",
+                }}
+              >
+                <HelpOutline fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <TextField
+              fullWidth
+              label="Inflation moyenne annuelle (%)"
+              type="number"
+              value={market?.inflationMean ?? 2}
+              onChange={(e) =>
+                updateFormData({
+                  marketAssumptions: {
+                    ...market!,
+                    inflationMean: parseFloat(e.target.value) || 0,
+                  },
+                })
+              }
+              helperText="Exemple : 2% (objectif BCE)"
+              sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+            />
+          </Box>
         </Grid>
         <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Volatilité de l'inflation (%)"
-            type="number"
-            value={market?.inflationVolatility ?? 1}
-            onChange={(e) =>
-              updateFormData({
-                marketAssumptions: {
-                  ...market!,
-                  inflationVolatility: parseFloat(e.target.value) || 0,
-                },
-              })
-            }
-          />
+          <Box sx={{ position: "relative" }}>
+            <Tooltip
+              title="Variabilité de l'inflation autour de sa moyenne. Une volatilité de 1% signifie que l'inflation peut varier entre 1% et 3% environ (moyenne ± volatilité)."
+              arrow
+              placement="top"
+            >
+              <IconButton
+                size="small"
+                sx={{
+                  position: "absolute",
+                  right: 4,
+                  top: 4,
+                  zIndex: 1,
+                  color: "text.secondary",
+                }}
+              >
+                <HelpOutline fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <TextField
+              fullWidth
+              label="Volatilité de l'inflation (%)"
+              type="number"
+              value={market?.inflationVolatility ?? 1}
+              onChange={(e) =>
+                updateFormData({
+                  marketAssumptions: {
+                    ...market!,
+                    inflationVolatility: parseFloat(e.target.value) || 0,
+                  },
+                })
+              }
+              helperText="Exemple : 1% (variation autour de la moyenne)"
+              sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+            />
+          </Box>
         </Grid>
       </Grid>
 
@@ -136,26 +187,86 @@ export function MarketAssumptionsStep({ formData, updateFormData }: MarketAssump
                   </Typography>
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                      <TextField
-                        fullWidth
-                        label="Rendement annuel attendu (%)"
-                        type="number"
-                        value={asset.expectedReturn}
-                        onChange={(e) =>
-                          updateAssetClass(key, "expectedReturn", parseFloat(e.target.value) || 0)
-                        }
-                      />
+                      <Box sx={{ position: "relative" }}>
+                        <Tooltip
+                          title={`Rendement annuel moyen attendu pour ${assetClassLabels[key]}. Basé sur des données historiques : Actions mondiales ~7%, Obligations ~3%, Livrets ~1.5%, Crypto ~15% (très volatil).`}
+                          arrow
+                          placement="top"
+                        >
+                          <IconButton
+                            size="small"
+                            sx={{
+                              position: "absolute",
+                              right: 4,
+                              top: 4,
+                              zIndex: 1,
+                              color: "text.secondary",
+                            }}
+                          >
+                            <HelpOutline fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <TextField
+                          fullWidth
+                          label="Rendement annuel attendu (%)"
+                          type="number"
+                          value={asset.expectedReturn}
+                          onChange={(e) =>
+                            updateAssetClass(key, "expectedReturn", parseFloat(e.target.value) || 0)
+                          }
+                          helperText={
+                            key === "equities"
+                              ? "Exemple : 7% (moyenne historique actions mondiales)"
+                              : key === "bonds"
+                                ? "Exemple : 3% (obligations investment grade)"
+                                : key === "livrets"
+                                  ? "Exemple : 1.5% (Livret A)"
+                                  : "Valeur par défaut recommandée"
+                          }
+                          sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+                        />
+                      </Box>
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField
-                        fullWidth
-                        label="Volatilité annuelle (%)"
-                        type="number"
-                        value={asset.volatility}
-                        onChange={(e) =>
-                          updateAssetClass(key, "volatility", parseFloat(e.target.value) || 0)
-                        }
-                      />
+                      <Box sx={{ position: "relative" }}>
+                        <Tooltip
+                          title={`Volatilité annuelle (écart-type) pour ${assetClassLabels[key]}. Mesure la variabilité des rendements. Plus la volatilité est élevée, plus les rendements peuvent varier d'une année sur l'autre.`}
+                          arrow
+                          placement="top"
+                        >
+                          <IconButton
+                            size="small"
+                            sx={{
+                              position: "absolute",
+                              right: 4,
+                              top: 4,
+                              zIndex: 1,
+                              color: "text.secondary",
+                            }}
+                          >
+                            <HelpOutline fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <TextField
+                          fullWidth
+                          label="Volatilité annuelle (%)"
+                          type="number"
+                          value={asset.volatility}
+                          onChange={(e) =>
+                            updateAssetClass(key, "volatility", parseFloat(e.target.value) || 0)
+                          }
+                          helperText={
+                            key === "equities"
+                              ? "Exemple : 15% (actions volatiles)"
+                              : key === "bonds"
+                                ? "Exemple : 6% (obligations moins volatiles)"
+                                : key === "livrets"
+                                  ? "Exemple : 0.5% (très stable)"
+                                  : "Valeur par défaut recommandée"
+                          }
+                          sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+                        />
+                      </Box>
                     </Grid>
                   </Grid>
                 </Grid>
@@ -178,46 +289,50 @@ export function MarketAssumptionsStep({ formData, updateFormData }: MarketAssump
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Niveau de confiance (%)"
-                type="number"
-                value={((market?.confidenceLevel ?? 0.9) * 100).toFixed(0)}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) / 100;
-                  if (!isNaN(val) && val >= 50 && val <= 99.9) {
+              <FormControl fullWidth>
+                <InputLabel>Niveau de confiance</InputLabel>
+                <Select
+                  value={((market?.confidenceLevel ?? 0.9) * 100).toFixed(0)}
+                  label="Niveau de confiance"
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value) / 100;
                     updateFormData({
                       marketAssumptions: {
                         ...market!,
                         confidenceLevel: val,
                       },
                     });
-                  }
-                }}
-                inputProps={{ min: 50, max: 99.9, step: 0.1 }}
-                helperText="Niveau de confiance statistique (ex: 90 pour 90%)"
-              />
+                  }}
+                >
+                  <MenuItem value="90">90%</MenuItem>
+                  <MenuItem value="95">95%</MenuItem>
+                  <MenuItem value="99">99%</MenuItem>
+                </Select>
+                <FormHelperText>Niveau de confiance statistique pour les simulations</FormHelperText>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Tolérance (%)"
-                type="number"
-                value={((market?.toleranceRatio ?? 0.01) * 100).toFixed(1)}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) / 100;
-                  if (!isNaN(val) && val >= 0.1 && val <= 50) {
+              <FormControl fullWidth>
+                <InputLabel>Tolérance</InputLabel>
+                <Select
+                  value={((market?.toleranceRatio ?? 0.01) * 100).toFixed(0)}
+                  label="Tolérance"
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value) / 100;
                     updateFormData({
                       marketAssumptions: {
                         ...market!,
                         toleranceRatio: val,
                       },
                     });
-                  }
-                }}
-                inputProps={{ min: 0.1, max: 50, step: 0.1 }}
-                helperText="Marge d'erreur relative acceptée (ex: 5 pour 5%)"
-              />
+                  }}
+                >
+                  <MenuItem value="1">1%</MenuItem>
+                  <MenuItem value="5">5%</MenuItem>
+                  <MenuItem value="10">10%</MenuItem>
+                </Select>
+                <FormHelperText>Marge d'erreur relative acceptée</FormHelperText>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField

@@ -99,6 +99,9 @@ export interface InvestmentAccount {
   allocationObligations?: number;
   livretBreakdown?: LivretBreakdown[];
   expectedPerformance?: number;
+  // Paramètres fiscaux
+  openingDateAge?: number; // Âge auquel le compte a été ouvert
+  initialCostBasis?: number; // Coût d'acquisition initial (PMP) en euros
 }
 
 export interface CapitalizationPoint {
@@ -146,6 +149,15 @@ export interface MonteCarloResult {
   monthlyPercentiles: MonteCarloPercentilePoint[];
 }
 
+export interface TaxBreakdownByAccountType {
+  accountType: string;
+  grossWithdrawal: number;
+  capitalGain: number;
+  incomeTax: number;
+  socialContributions: number;
+  netWithdrawal: number;
+}
+
 export interface RetirementMonteCarloPoint {
   monthIndex: number;
   age: number;
@@ -156,6 +168,10 @@ export interface RetirementMonteCarloPoint {
   percentile50: number;
   percentile90: number;
   percentileMax: number;
+  taxesByAccountType?: TaxBreakdownByAccountType[];
+  totalIncomeTax?: number;
+  totalSocialContributions?: number;
+  totalTaxes?: number;
 }
 
 export interface RetirementMonteCarloResult {
@@ -172,6 +188,10 @@ export interface RetirementMonteCarloResult {
   percentileMax: number;
   standardDeviation: number;
   monthlyPercentiles: RetirementMonteCarloPoint[];
+  totalTaxesByAccountType?: Record<string, TaxBreakdownByAccountType>;
+  cumulativeTotalIncomeTax?: number;
+  cumulativeTotalSocialContributions?: number;
+  cumulativeTotalTaxes?: number;
 }
 
 export interface RetirementScenarioResults {
@@ -187,6 +207,12 @@ export interface OptimizationStep {
   finalCapital: number;
   effectiveFinalCapital: number;
   depletionMonths: number;
+}
+
+export interface TaxParameters {
+  tmiSavingsPhase?: number; // Taux Marginal d'Imposition pendant la phase d'épargne (0.0 à 0.45)
+  tmiRetirementPhase?: number; // Taux Marginal d'Imposition pendant la phase de retraite (0.0 à 0.45)
+  isCouple: boolean; // Indique si le foyer fiscal est un couple (pour abattements assurance-vie)
 }
 
 export interface SimulationInput {
@@ -205,6 +231,7 @@ export interface SimulationInput {
   housingLoanEndAge?: number;
   dependentsDepartureAge?: number;
   additionalIncomeStreams?: AdditionalIncome[];
+  taxParameters?: TaxParameters;
 }
 
 export interface SimulationResult {

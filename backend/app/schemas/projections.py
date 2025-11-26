@@ -77,6 +77,35 @@ class InvestmentAccount(BaseModel):
     allocation_obligations: Optional[NonNegativeFloat] = None
     livret_breakdown: Optional[List[LivretBreakdown]] = None
     expected_performance: Optional[float] = None
+    # Paramètres fiscaux
+    opening_date_age: Optional[PositiveFloat] = Field(
+        default=None,
+        description="Âge auquel le compte a été ouvert (pour calculer l'ancienneté)"
+    )
+    initial_cost_basis: Optional[NonNegativeFloat] = Field(
+        default=None,
+        description="Coût d'acquisition initial (PMP) du compte en euros"
+    )
+
+
+class TaxParameters(BaseModel):
+    """Paramètres fiscaux pour les phases de versement et de retraite"""
+    tmi_savings_phase: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=0.45,
+        description="Taux Marginal d'Imposition (TMI) pendant la phase d'épargne (0.0 à 0.45)"
+    )
+    tmi_retirement_phase: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=0.45,
+        description="Taux Marginal d'Imposition (TMI) pendant la phase de retraite (0.0 à 0.45)"
+    )
+    is_couple: bool = Field(
+        default=False,
+        description="Indique si le foyer fiscal est un couple (pour abattements assurance-vie)"
+    )
 
 
 class CapitalizationInput(BaseModel):
@@ -84,6 +113,10 @@ class CapitalizationInput(BaseModel):
     savings_phases: List[SavingsPhase] = Field(default_factory=list)
     investment_accounts: List[InvestmentAccount]
     market_assumptions: MarketAssumptions
+    tax_parameters: Optional[TaxParameters] = Field(
+        default=None,
+        description="Paramètres fiscaux pour la phase de capitalisation"
+    )
 
 
 class CapitalizationPoint(BaseModel):
@@ -138,6 +171,16 @@ class MonteCarloResult(BaseModel):
     monthly_percentiles: List[MonteCarloPercentilePoint] = Field(default_factory=list)
 
 
+class TaxBreakdownByAccountType(BaseModel):
+    """Répartition des taxes par type de compte"""
+    account_type: str
+    gross_withdrawal: float = 0.0
+    capital_gain: float = 0.0
+    income_tax: float = 0.0
+    social_contributions: float = 0.0
+    net_withdrawal: float = 0.0
+
+
 class RetirementMonteCarloPoint(BaseModel):
     month_index: int
     age: float
@@ -148,6 +191,11 @@ class RetirementMonteCarloPoint(BaseModel):
     percentile_90: float
     percentile_min: float
     percentile_max: float
+    # Taxes par type de compte (pour le mois de référence)
+    taxes_by_account_type: List[TaxBreakdownByAccountType] = Field(default_factory=list)
+    total_income_tax: float = 0.0
+    total_social_contributions: float = 0.0
+    total_taxes: float = 0.0
 
 
 class RetirementMonteCarloInput(BaseModel):
@@ -158,6 +206,10 @@ class RetirementMonteCarloInput(BaseModel):
     target_monthly_income: NonNegativeFloat
     state_pension_monthly_income: NonNegativeFloat
     additional_income_streams: Optional[List[AdditionalIncome]] = None
+    tax_parameters: Optional[TaxParameters] = Field(
+        default=None,
+        description="Paramètres fiscaux pour la phase de retraite"
+    )
     confidence_level: float = Field(default=0.9, ge=0.5, le=0.999)
     tolerance_ratio: float = Field(default=0.05, ge=0.001, le=0.5)
     max_iterations: int = Field(default=20000, ge=100)
@@ -180,6 +232,11 @@ class RetirementMonteCarloResult(BaseModel):
     percentile_max: float
     standard_deviation: float
     monthly_percentiles: List[RetirementMonteCarloPoint] = Field(default_factory=list)
+    # Totaux des taxes sur toute la période de retraite
+    total_taxes_by_account_type: Dict[str, TaxBreakdownByAccountType] = Field(default_factory=dict)
+    cumulative_total_income_tax: float = 0.0
+    cumulative_total_social_contributions: float = 0.0
+    cumulative_total_taxes: float = 0.0
 
 
 class RetirementScenarioResults(BaseModel):
@@ -206,11 +263,23 @@ class SavingsOptimizationInput(BaseModel):
     target_monthly_income: NonNegativeFloat
     state_pension_monthly_income: NonNegativeFloat
     additional_income_streams: Optional[List[AdditionalIncome]] = None
+    tax_parameters: Optional[TaxParameters] = Field(
+        default=None,
+        description="Paramètres fiscaux pour les phases d'épargne et de retraite"
+    )
     confidence_level: float = Field(default=0.9, ge=0.5, le=0.999)
     tolerance_ratio: float = Field(default=0.01, ge=0.0001, le=0.5)
     max_iterations: int = Field(default=20, ge=3, le=200)
     batch_size: int = Field(default=500, ge=50)
     target_final_capital: float = Field(default=0.0)
+    capitalization_only: bool = Field(
+        default=False,
+        description="Si True, simule uniquement la phase de capitalisation sans la phase de retraite"
+    )
+    calculate_minimum_savings: bool = Field(
+        default=True,
+        description="Si True, calcule l'épargne minimum nécessaire via l'algorithme d'optimisation. Si False, utilise uniquement les versements réels."
+    )
 
 
 class RecommendedSavingsResult(BaseModel):
@@ -218,7 +287,10 @@ class RecommendedSavingsResult(BaseModel):
     recommended_monthly_savings: float
     minimum_capital_at_retirement: float  # Capital minimum nécessaire à la retraite
     monte_carlo_result: MonteCarloResult  # Courbes avec versements réels
-    retirement_results: RetirementScenarioResults  # Courbes avec versements réels
+    retirement_results: Optional[RetirementScenarioResults] = Field(
+        default=None,
+        description="Courbes avec versements réels (None si capitalization_only=True)"
+    )
     steps: List[OptimizationStep] = Field(default_factory=list)
     residual_error: float
     residual_error_ratio: float

@@ -88,6 +88,13 @@ export function SummaryStep({ formData }: SummaryStepProps) {
                 .toLocaleString("fr-FR")}{" "}
               €
             </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              <strong>Versements mensuels totaux :</strong>{" "}
+              {formData.investmentAccounts
+                .reduce((sum, acc) => sum + (acc.monthlyContribution || 0), 0)
+                .toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+              €
+            </Typography>
           </Paper>
         </Grid>
 
@@ -102,6 +109,80 @@ export function SummaryStep({ formData }: SummaryStepProps) {
             <Typography variant="body2">
               <strong>Revenus additionnels :</strong> {formData.additionalIncomeStreams?.length ?? 0}
             </Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+              Versements mensuels
+            </Typography>
+            {formData.investmentAccounts.length > 0 ? (
+              <Box sx={{ mt: 1 }}>
+                {formData.investmentAccounts
+                  .filter((acc) => (acc.monthlyContribution || 0) > 0)
+                  .map((account, index) => {
+                    const accountTypeLabels: Record<string, string> = {
+                      pea: "PEA",
+                      per: "PER",
+                      assurance_vie: "AV",
+                      livret: "Livret",
+                      cto: "CTO",
+                      crypto: "Crypto",
+                      autre: "Autre",
+                    };
+                    return (
+                      <Box
+                        key={account.id || index}
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          py: 0.75,
+                          borderBottom: index < formData.investmentAccounts.filter((acc) => (acc.monthlyContribution || 0) > 0).length - 1 ? "1px solid" : "none",
+                          borderColor: "divider",
+                        }}
+                      >
+                        <Typography variant="body2">
+                          {account.label || `Compte ${index + 1}`} ({accountTypeLabels[account.type] || account.type}
+                          {account.ownerName && ` • ${account.ownerName}`})
+                        </Typography>
+                        <Typography variant="body2" fontWeight="medium">
+                          {(account.monthlyContribution || 0).toLocaleString("fr-FR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          €/mois
+                        </Typography>
+                      </Box>
+                    );
+                  })}
+                {formData.investmentAccounts.filter((acc) => (acc.monthlyContribution || 0) > 0).length === 0 && (
+                  <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                    Aucun versement mensuel défini
+                  </Typography>
+                )}
+                {formData.investmentAccounts.filter((acc) => (acc.monthlyContribution || 0) > 0).length > 0 && (
+                  <Box sx={{ mt: 1.5, pt: 1, borderTop: "2px solid", borderColor: "primary.main" }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <Typography variant="body2" fontWeight="bold">
+                        Total mensuel
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold" color="primary">
+                        {formData.investmentAccounts
+                          .reduce((sum, acc) => sum + (acc.monthlyContribution || 0), 0)
+                          .toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                        €
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                Aucun compte d'investissement défini
+              </Typography>
+            )}
           </Paper>
         </Grid>
 

@@ -356,11 +356,6 @@ export function InvestmentAllocationCharts({
         orient: "horizontal",
         bottom: "5%",
         left: "center",
-        textStyle: {
-          color: theme.palette.text.primary,
-          fontSize: 13,
-          fontWeight: 500,
-        },
         itemWidth: 18,
         itemHeight: 18,
         itemGap: 20,
@@ -374,6 +369,9 @@ export function InvestmentAllocationCharts({
           return name;
         },
         textStyle: {
+          color: theme.palette.text.primary,
+          fontSize: 13,
+          fontWeight: 500,
           rich: {
             name: {
               fontSize: 13,
@@ -576,9 +574,10 @@ export function InvestmentAllocationCharts({
           const path = params.treePathInfo?.map((p: any) => p.name).join(" › ") || params.name;
           const data = params.data as any;
           
+          const borderColor = theme.palette.mode === "dark" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)";
           let accountList = "";
           if (data.accounts && data.accounts.length > 0) {
-            accountList = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);">
+            accountList = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${borderColor};">
               Comptes : ${data.accounts.join(", ")}
             </div>`;
           }
@@ -598,11 +597,11 @@ export function InvestmentAllocationCharts({
             </div>
           `;
         },
-        backgroundColor: "rgba(15, 23, 42, 0.95)",
-        borderColor: "rgba(148, 163, 184, 0.3)",
+        backgroundColor: theme.palette.mode === "dark" ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        borderColor: theme.palette.divider,
         borderWidth: 1,
         textStyle: {
-          color: "#f8fafc",
+          color: theme.palette.text.primary,
         },
       },
       visualMap: {
@@ -680,22 +679,23 @@ export function InvestmentAllocationCharts({
               const treePathInfo = params.treePathInfo || [];
               const level = treePathInfo.length;
               
+              // Format simple sans rich text pour éviter les problèmes d'affichage
               // Niveau propriétaire (niveau 1)
               if (level === 1) {
-                return `{name|${name}}\n{value|${formatCurrency(value)}}`;
+                return `${name}\n${formatCurrency(value)}`;
               }
               
               // Niveau type de compte (niveau 2)
               if (level === 2) {
                 const data = params.data as any;
                 const accountCount = data.accounts?.length || 0;
-                return `{name|${name}}\n{value|${formatCurrency(value)}}\n{count|${accountCount} compte${accountCount > 1 ? "s" : ""}}`;
+                return `${name}\n${formatCurrency(value)}\n${accountCount} compte${accountCount > 1 ? "s" : ""}`;
               }
               
               // Niveau classe d'actif (niveau 3)
               if (level === 3) {
                 const shortName = name.length > 10 ? name.substring(0, 10) + "…" : name;
-                return `{name|${shortName}}\n{value|${formatCurrency(value, 0)}}`;
+                return `${shortName}\n${formatCurrency(value, 0)}`;
               }
               
               return name;
@@ -705,36 +705,16 @@ export function InvestmentAllocationCharts({
             color: theme.palette.text.primary,
             overflow: "truncate",
             ellipsis: "…",
-            rich: {
-              name: {
-                fontSize: 12,
-                fontWeight: "bold",
-                color: "#0f172a",
-              },
-              value: {
-                fontSize: 13,
-                fontWeight: "bold",
-                color: "#2563eb",
-                backgroundColor: "rgba(255, 255, 255, 0.9)",
-                padding: [2, 6],
-                borderRadius: 4,
-              },
-              count: {
-                fontSize: 10,
-                color: "#64748b",
-                fontStyle: "italic",
-              },
-            },
           },
           upperLabel: {
             show: true,
             height: 35,
             fontSize: 16,
             fontWeight: "bold",
-            color: "#0f172a",
+            color: theme.palette.text.primary,
           },
           itemStyle: {
-            borderColor: "#fff",
+            borderColor: theme.palette.mode === "dark" ? theme.palette.divider : "#fff",
             borderWidth: 3,
             gapWidth: 3,
           },
@@ -766,17 +746,23 @@ export function InvestmentAllocationCharts({
             {
               // Niveau propriétaires
               itemStyle: {
-                borderColor: "#fff",
+                borderColor: theme.palette.mode === "dark" ? theme.palette.divider : "#fff",
                 borderWidth: 4,
                 gapWidth: 8,
               },
               label: {
+                show: true,
                 fontSize: 16,
                 fontWeight: "bold",
-                color: "#ffffff",
-                backgroundColor: "rgba(15, 23, 42, 0.85)",
+                color: theme.palette.mode === "dark" ? theme.palette.text.primary : "#ffffff",
+                backgroundColor: theme.palette.mode === "dark" ? theme.palette.background.paper : "rgba(15, 23, 42, 0.85)",
                 padding: [8, 12],
                 borderRadius: 6,
+                formatter: (params: any) => {
+                  const name = params.name as string;
+                  const value = params.value as number;
+                  return `${name}\n${formatCurrency(value)}`;
+                },
               },
               emphasis: {
                 itemStyle: {
@@ -788,33 +774,48 @@ export function InvestmentAllocationCharts({
             {
               // Niveau types de compte
               itemStyle: {
-                borderColor: "#fff",
+                borderColor: theme.palette.mode === "dark" ? theme.palette.divider : "#fff",
                 borderWidth: 3,
                 gapWidth: 4,
               },
               label: {
+                show: true,
                 fontSize: 13,
                 fontWeight: "bold",
-                color: "#0f172a",
-                backgroundColor: "rgba(255, 255, 255, 0.9)",
+                color: theme.palette.text.primary,
+                backgroundColor: theme.palette.mode === "dark" ? theme.palette.background.paper : "rgba(255, 255, 255, 0.9)",
                 padding: [4, 8],
                 borderRadius: 4,
+                formatter: (params: any) => {
+                  const name = params.name as string;
+                  const value = params.value as number;
+                  const data = params.data as any;
+                  const accountCount = data?.accounts?.length || 0;
+                  return `${name}\n${formatCurrency(value)}\n${accountCount} compte${accountCount > 1 ? "s" : ""}`;
+                },
               },
             },
             {
               // Niveau classes d'actif - Gradient appliqué
               itemStyle: {
-                borderColor: "#fff",
+                borderColor: theme.palette.mode === "dark" ? theme.palette.divider : "#fff",
                 borderWidth: 2,
                 gapWidth: 2,
               },
               label: {
+                show: true,
                 fontSize: 11,
                 fontWeight: "bold",
-                color: "#0f172a",
-                backgroundColor: "rgba(255, 255, 255, 0.9)",
+                color: theme.palette.text.primary,
+                backgroundColor: theme.palette.mode === "dark" ? theme.palette.background.paper : "rgba(255, 255, 255, 0.9)",
                 padding: [2, 4],
                 borderRadius: 4,
+                formatter: (params: any) => {
+                  const name = params.name as string;
+                  const value = params.value as number;
+                  const shortName = name.length > 10 ? name.substring(0, 10) + "…" : name;
+                  return `${shortName}\n${formatCurrency(value, 0)}`;
+                },
               },
               visualMin: minValue,
               visualMax: maxValue,
@@ -1129,7 +1130,7 @@ export function InvestmentAllocationCharts({
               sx={{
                 fontSize: { xs: "1.5rem", md: "1.75rem" },
                 fontWeight: 700,
-                color: "#0f172a",
+                color: theme.palette.text.primary,
               }}
             >
               Répartition des placements à la retraite
@@ -1141,7 +1142,6 @@ export function InvestmentAllocationCharts({
             sx={{
               fontSize: "0.95rem",
               lineHeight: 1.5,
-              color: "#475569",
             }}
           >
             Capital médian estimé : <strong>{formatCurrency(medianCapitalAtRetirement)}</strong>
@@ -1184,15 +1184,15 @@ export function InvestmentAllocationCharts({
           <GridLegacy item xs={12} md={6}>
             <Card
               sx={{
-                background: "linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))",
+                background: theme.palette.background.paper,
                 borderRadius: "1.5rem",
-                boxShadow: "0 20px 40px rgba(148, 163, 184, 0.2)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[4],
+                border: `1px solid ${theme.palette.divider}`,
                 height: "100%",
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "&:hover": {
                   transform: "translateY(-4px)",
-                  boxShadow: "0 24px 48px rgba(148, 163, 184, 0.3)",
+                  boxShadow: theme.shadows[8],
                 },
               }}
             >
@@ -1205,7 +1205,7 @@ export function InvestmentAllocationCharts({
                     sx={{
                       fontSize: { xs: "1.15rem", md: "1.3rem" },
                       fontWeight: 700,
-                      color: "#0f172a",
+                      color: theme.palette.text.primary,
                     }}
                   >
                     Répartition par type de compte
@@ -1217,7 +1217,6 @@ export function InvestmentAllocationCharts({
                   sx={{
                     mb: 2,
                     fontSize: "0.85rem",
-                    color: "#64748b",
                   }}
                 >
                   Visualisation des montants par enveloppe fiscale
@@ -1240,15 +1239,15 @@ export function InvestmentAllocationCharts({
           <GridLegacy item xs={12} md={6}>
             <Card
               sx={{
-                background: "linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))",
+                background: theme.palette.background.paper,
                 borderRadius: "1.5rem",
-                boxShadow: "0 20px 40px rgba(148, 163, 184, 0.2)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[4],
+                border: `1px solid ${theme.palette.divider}`,
                 height: "100%",
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "&:hover": {
                   transform: "translateY(-4px)",
-                  boxShadow: "0 24px 48px rgba(148, 163, 184, 0.3)",
+                  boxShadow: theme.shadows[8],
                 },
               }}
             >
@@ -1261,7 +1260,7 @@ export function InvestmentAllocationCharts({
                     sx={{
                       fontSize: { xs: "1.15rem", md: "1.3rem" },
                       fontWeight: 700,
-                      color: "#0f172a",
+                      color: theme.palette.text.primary,
                     }}
                   >
                     Allocation d&apos;actifs
@@ -1273,7 +1272,6 @@ export function InvestmentAllocationCharts({
                   sx={{
                     mb: 2,
                     fontSize: "0.85rem",
-                    color: "#64748b",
                   }}
                 >
                   Répartition stratégique du capital
@@ -1296,14 +1294,14 @@ export function InvestmentAllocationCharts({
           <GridLegacy item xs={12} md={12}>
             <Card
               sx={{
-                background: "linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))",
+                background: theme.palette.background.paper,
                 borderRadius: "1.5rem",
-                boxShadow: "0 20px 40px rgba(148, 163, 184, 0.2)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[4],
+                border: `1px solid ${theme.palette.divider}`,
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "&:hover": {
                   transform: "translateY(-4px)",
-                  boxShadow: "0 24px 48px rgba(148, 163, 184, 0.3)",
+                  boxShadow: theme.shadows[8],
                 },
               }}
             >
@@ -1316,7 +1314,7 @@ export function InvestmentAllocationCharts({
                     sx={{
                       fontSize: { xs: "1.15rem", md: "1.3rem" },
                       fontWeight: 700,
-                      color: "#0f172a",
+                      color: theme.palette.text.primary,
                     }}
                   >
                     Composition détaillée par type
@@ -1328,7 +1326,6 @@ export function InvestmentAllocationCharts({
                   sx={{
                     mb: 2,
                     fontSize: "0.85rem",
-                    color: "#64748b",
                   }}
                 >
                   Répartition des classes d&apos;actifs au sein de chaque enveloppe
@@ -1351,14 +1348,14 @@ export function InvestmentAllocationCharts({
           <GridLegacy item xs={12}>
             <Card
               sx={{
-                background: "linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))",
+                background: theme.palette.background.paper,
                 borderRadius: "1.5rem",
-                boxShadow: "0 20px 40px rgba(148, 163, 184, 0.2)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[4],
+                border: `1px solid ${theme.palette.divider}`,
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "&:hover": {
                   transform: "translateY(-4px)",
-                  boxShadow: "0 24px 48px rgba(148, 163, 184, 0.3)",
+                  boxShadow: theme.shadows[8],
                 },
               }}
             >
@@ -1371,7 +1368,7 @@ export function InvestmentAllocationCharts({
                     sx={{
                       fontSize: { xs: "1.15rem", md: "1.3rem" },
                       fontWeight: 700,
-                      color: "#0f172a",
+                      color: theme.palette.text.primary,
                     }}
                   >
                     Vue hiérarchique par propriétaire
@@ -1383,7 +1380,6 @@ export function InvestmentAllocationCharts({
                   sx={{
                     mb: 2,
                     fontSize: "0.85rem",
-                    color: "#64748b",
                   }}
                 >
                   Exploration interactive : Propriétaire › Type de compte › Classe d&apos;actif. 

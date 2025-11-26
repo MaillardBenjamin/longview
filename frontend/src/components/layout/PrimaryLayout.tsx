@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { IconButton, Tooltip, useTheme } from "@mui/material";
+import { Brightness4, Brightness7 } from "@mui/icons-material";
 import { useAuth } from "@/hooks/useAuth";
 import { Logo } from "@/components/shared/Logo";
 import { fetchProject } from "@/services/projects";
+import { useThemeModeContext } from "@/providers/ThemeModeProvider";
 import "./PrimaryLayout.css";
 
 const navLinks = [
@@ -16,6 +19,8 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { mode, toggleMode } = useThemeModeContext();
+  const theme = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [currentProjectName, setCurrentProjectName] = useState<string | null>(null);
@@ -131,7 +136,7 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
   }, [menuOpen]);
 
   return (
-    <div className="layout">
+    <div className={`layout layout--${mode}`}>
       <header className="layout__header">
         <div className="layout__brand">
           <Logo />
@@ -164,6 +169,18 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <div className="layout__auth">
+          <Tooltip title={mode === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}>
+            <IconButton
+              onClick={toggleMode}
+              sx={{
+                color: theme.palette.text.primary,
+                marginRight: user ? "1rem" : "0.5rem",
+              }}
+              aria-label="Basculer le mode sombre/clair"
+            >
+              {mode === "dark" ? <Brightness7 /> : <Brightness4 />}
+            </IconButton>
+          </Tooltip>
           {user ? (
             <>
               <Link to="/projects" className="layout__nav-link" style={{ marginRight: "1rem" }}>
@@ -184,7 +201,7 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
                     transition: "background-color 0.2s",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
+                    e.currentTarget.style.backgroundColor = theme.palette.action.hover;
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";
@@ -199,12 +216,13 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
                       top: "100%",
                       right: 0,
                       marginTop: "0.5rem",
-                      backgroundColor: "white",
+                      backgroundColor: theme.palette.background.paper,
                       borderRadius: "8px",
-                      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)",
+                      boxShadow: theme.shadows[4],
                       minWidth: "200px",
                       zIndex: 1000,
                       overflow: "hidden",
+                      border: `1px solid ${theme.palette.divider}`,
                     }}
                   >
                     <Link
@@ -213,14 +231,14 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
                         display: "block",
                         padding: "0.75rem 1rem",
                         textDecoration: "none",
-                        color: "#333",
+                        color: theme.palette.text.primary,
                         transition: "background-color 0.2s",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "#f5f5f5";
+                        e.currentTarget.style.backgroundColor = theme.palette.action.hover;
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "white";
+                        e.currentTarget.style.backgroundColor = theme.palette.background.paper;
                       }}
                       onClick={() => setMenuOpen(false)}
                     >
@@ -229,7 +247,7 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
                     <div
                       style={{
                         height: "1px",
-                        backgroundColor: "#e0e0e0",
+                        backgroundColor: theme.palette.divider,
                         margin: "0.25rem 0",
                       }}
                     />
@@ -253,7 +271,9 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
                         fontSize: "inherit",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "#ffebee";
+                        e.currentTarget.style.backgroundColor = theme.palette.mode === "dark" 
+                          ? "rgba(211, 47, 47, 0.2)" 
+                          : "#ffebee";
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = "transparent";

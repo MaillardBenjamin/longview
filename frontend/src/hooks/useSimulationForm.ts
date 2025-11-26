@@ -126,6 +126,11 @@ const initialFormState: SimulationInput = {
     untilAge: child.departureAge,
   })),
   investmentAccounts: [],
+  taxParameters: {
+    isCouple: true,
+    tmiSavingsPhase: 0.30, // 30% par défaut
+    tmiRetirementPhase: 0.30, // 30% par défaut
+  },
   marketAssumptions: {
     inflationMean: 2,
     inflationVolatility: 1,

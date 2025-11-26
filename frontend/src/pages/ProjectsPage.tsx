@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { SEO, createWebPageSchema } from "@/components/seo/SEO";
 import {
   Box,
   Button,
@@ -44,6 +45,12 @@ export function ProjectsPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDescription, setNewProjectDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const structuredData = createWebPageSchema(
+    "Mes projets - LongView",
+    "Gérez vos projets de simulation de retraite. Créez, modifiez et consultez vos simulations sauvegardées.",
+    typeof window !== "undefined" ? window.location.href : "https://longview.app/projects",
+  );
 
   // Récupérer les projets
   const { data: projects, isLoading } = useQuery({
@@ -148,14 +155,29 @@ export function ProjectsPage() {
 
   if (isLoading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 8, textAlign: "center" }}>
-        <CircularProgress />
-      </Container>
+      <>
+        <SEO
+          title="Mes projets"
+          description="Gérez vos projets de simulation de retraite. Créez, modifiez et consultez vos simulations sauvegardées avec LongView."
+          keywords="projets simulation retraite, gestion projets, simulations sauvegardées"
+          structuredData={structuredData}
+        />
+        <Container maxWidth="lg" sx={{ py: 8, textAlign: "center" }}>
+          <CircularProgress />
+        </Container>
+      </>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <>
+      <SEO
+        title="Mes projets"
+        description="Gérez vos projets de simulation de retraite. Créez, modifiez et consultez vos simulations sauvegardées avec LongView."
+        keywords="projets simulation retraite, gestion projets, simulations sauvegardées"
+        structuredData={structuredData}
+      />
+      <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
         <Typography variant="h4" component="h1">
           Mes projets
@@ -329,6 +351,7 @@ export function ProjectsPage() {
         </DialogActions>
       </Dialog>
     </Container>
+    </>
   );
 }
 

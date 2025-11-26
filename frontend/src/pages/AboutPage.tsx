@@ -6,11 +6,25 @@
  */
 
 import { Link } from "react-router-dom";
+import { SEO, createWebPageSchema } from "@/components/seo/SEO";
 import "./AboutPage.css";
 
 export function AboutPage() {
+  const structuredData = createWebPageSchema(
+    "À propos - LongView",
+    "Découvrez l'origine du projet LongView, un simulateur de retraite open source avec simulations Monte Carlo et optimisation de l'épargne.",
+    typeof window !== "undefined" ? window.location.href : "https://longview.app/a-propos",
+  );
+
   return (
-    <div className="about-page">
+    <>
+      <SEO
+        title="À propos"
+        description="Découvrez l'origine du projet LongView, un simulateur de retraite open source avec simulations Monte Carlo et optimisation de l'épargne. Code source disponible sur GitHub."
+        keywords="simulateur retraite open source, planification retraite, Monte Carlo, code source GitHub, projet communautaire"
+        structuredData={structuredData}
+      />
+      <div className="about-page">
       <header className="about-page__header">
         <h1>À propos de LongView</h1>
         <p className="about-page__subtitle">
@@ -222,6 +236,7 @@ export function AboutPage() {
         </section>
       </div>
     </div>
+    </>
   );
 }
 

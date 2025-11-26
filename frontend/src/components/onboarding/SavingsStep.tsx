@@ -15,9 +15,12 @@ import {
   Select,
   TextField,
   Typography,
+  Tooltip,
 } from "@mui/material";
 import Grid from "@mui/material/GridLegacy";
-import { Add, Delete } from "@mui/icons-material";
+import { Add, Delete, HelpOutline } from "@mui/icons-material";
+import { useState } from "react";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type {
   AdultProfile,
   InvestmentAccount,
@@ -75,6 +78,31 @@ export function SavingsStep({
   removeInvestmentAccount,
   adults,
 }: SavingsStepProps) {
+  const [deleteSavingsPhaseIndex, setDeleteSavingsPhaseIndex] = useState<number | null>(null);
+  const [deleteAccountId, setDeleteAccountId] = useState<string | null>(null);
+
+  const handleRemoveSavingsPhase = (index: number) => {
+    setDeleteSavingsPhaseIndex(index);
+  };
+
+  const handleRemoveAccount = (id: string) => {
+    setDeleteAccountId(id);
+  };
+
+  const confirmRemoveSavingsPhase = () => {
+    if (deleteSavingsPhaseIndex !== null) {
+      removeSavingsPhase(deleteSavingsPhaseIndex);
+      setDeleteSavingsPhaseIndex(null);
+    }
+  };
+
+  const confirmRemoveAccount = () => {
+    if (deleteAccountId) {
+      removeInvestmentAccount(deleteAccountId);
+      setDeleteAccountId(null);
+    }
+  };
+
   const handleAddAccount = () => {
     const newAccount: InvestmentAccount = {
       id: generateId(),
@@ -120,7 +148,7 @@ export function SavingsStep({
             <IconButton
               size="small"
               color="error"
-              onClick={() => removeSavingsPhase(index)}
+              onClick={() => handleRemoveSavingsPhase(index)}
               aria-label="Supprimer"
             >
               <Delete />
@@ -158,15 +186,37 @@ export function SavingsStep({
               />
             </Grid>
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Épargne mensuelle (€)"
-                type="number"
-                value={phase.monthlyContribution}
-                onChange={(e) =>
-                  updateSavingsPhase(index, { monthlyContribution: parseFloat(e.target.value) || 0 })
-                }
-              />
+              <Box sx={{ position: "relative" }}>
+                <Tooltip
+                  title="Montant total que vous épargnez chaque mois pendant cette phase. Peut inclure plusieurs comptes d'investissement. Cette valeur est indicative et sert à modéliser l'évolution de votre capacité d'épargne."
+                  arrow
+                  placement="top"
+                >
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      right: 4,
+                      top: 4,
+                      zIndex: 1,
+                      color: "text.secondary",
+                    }}
+                  >
+                    <HelpOutline fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <TextField
+                  fullWidth
+                  label="Épargne mensuelle (€)"
+                  type="number"
+                  value={phase.monthlyContribution}
+                  onChange={(e) =>
+                    updateSavingsPhase(index, { monthlyContribution: parseFloat(e.target.value) || 0 })
+                  }
+                  helperText="Exemple : 500 €/mois ou 1000 €/mois après la fin du crédit"
+                  sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+                />
+              </Box>
             </Grid>
           </Grid>
         </Box>
@@ -197,7 +247,7 @@ export function SavingsStep({
             <IconButton
               size="small"
               color="error"
-              onClick={() => removeInvestmentAccount(account.id)}
+              onClick={() => handleRemoveAccount(account.id)}
               aria-label="Supprimer"
             >
               <Delete />
@@ -231,30 +281,74 @@ export function SavingsStep({
               />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Capital actuel (€)"
-                type="number"
-                value={account.currentAmount}
-                onChange={(e) =>
-                  updateInvestmentAccount(account.id, {
-                    currentAmount: parseFloat(e.target.value) || 0,
-                  })
-                }
-              />
+              <Box sx={{ position: "relative" }}>
+                <Tooltip
+                  title="Montant actuellement présent sur ce compte d'investissement. C'est le capital de départ qui sera utilisé pour la simulation."
+                  arrow
+                  placement="top"
+                >
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      right: 4,
+                      top: 4,
+                      zIndex: 1,
+                      color: "text.secondary",
+                    }}
+                  >
+                    <HelpOutline fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <TextField
+                  fullWidth
+                  label="Capital actuel (€)"
+                  type="number"
+                  value={account.currentAmount}
+                  onChange={(e) =>
+                    updateInvestmentAccount(account.id, {
+                      currentAmount: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  helperText="Exemple : 10 000 € sur votre PEA"
+                  sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+                />
+              </Box>
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Cotisation mensuelle (€)"
-                type="number"
-                value={account.monthlyContribution}
-                onChange={(e) =>
-                  updateInvestmentAccount(account.id, {
-                    monthlyContribution: parseFloat(e.target.value) || 0,
-                  })
-                }
-              />
+              <Box sx={{ position: "relative" }}>
+                <Tooltip
+                  title="Montant que vous versez chaque mois sur ce compte. Ces versements seront effectués jusqu'à la retraite (ou jusqu'à la fin de la phase d'épargne correspondante)."
+                  arrow
+                  placement="top"
+                >
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      right: 4,
+                      top: 4,
+                      zIndex: 1,
+                      color: "text.secondary",
+                    }}
+                  >
+                    <HelpOutline fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <TextField
+                  fullWidth
+                  label="Cotisation mensuelle (€)"
+                  type="number"
+                  value={account.monthlyContribution}
+                  onChange={(e) =>
+                    updateInvestmentAccount(account.id, {
+                      monthlyContribution: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  helperText="Exemple : 200 €/mois sur votre PEA"
+                  sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+                />
+              </Box>
             </Grid>
             <Grid item xs={12} sm={4}>
               <FormControl fullWidth>
@@ -279,6 +373,76 @@ export function SavingsStep({
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ position: "relative" }}>
+                <Tooltip
+                  title="Âge auquel vous avez ouvert ce compte. Important pour le calcul de l'ancienneté fiscale, notamment pour l'assurance-vie (abattements après 8 ans : 4600€ célibataire / 9200€ couple)."
+                  arrow
+                  placement="top"
+                >
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      right: 4,
+                      top: 4,
+                      zIndex: 1,
+                      color: "text.secondary",
+                    }}
+                  >
+                    <HelpOutline fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <TextField
+                  fullWidth
+                  label="Âge d'ouverture du compte"
+                  type="number"
+                  helperText="Exemple : 30 ans (si vous avez ouvert le compte à 30 ans)"
+                  value={account.openingDateAge ?? ""}
+                  onChange={(e) =>
+                    updateInvestmentAccount(account.id, {
+                      openingDateAge: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })
+                  }
+                  sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+                />
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ position: "relative" }}>
+                <Tooltip
+                  title="Montant total que vous avez versé sur ce compte depuis son ouverture (somme de tous vos versements). Utilisé pour calculer les plus-values imposables. Si non renseigné, on suppose que le capital actuel correspond aux versements totaux."
+                  arrow
+                  placement="top"
+                >
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      right: 4,
+                      top: 4,
+                      zIndex: 1,
+                      color: "text.secondary",
+                    }}
+                  >
+                    <HelpOutline fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <TextField
+                  fullWidth
+                  label="Coût d'acquisition initial (€)"
+                  type="number"
+                  helperText="Exemple : 15 000 € si vous avez versé 15 000 € au total (même si le capital actuel vaut 20 000 €)"
+                  value={account.initialCostBasis ?? ""}
+                  onChange={(e) =>
+                    updateInvestmentAccount(account.id, {
+                      initialCostBasis: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })
+                  }
+                  sx={{ "& .MuiInputBase-root": { paddingRight: "40px" } }}
+                />
+              </Box>
             </Grid>
             {(account.type === "per" || account.type === "assurance_vie") && (
               <>
@@ -399,6 +563,28 @@ export function SavingsStep({
       <Button startIcon={<Add />} onClick={handleAddAccount} variant="outlined">
         Ajouter un compte d'investissement
       </Button>
+
+      <ConfirmDialog
+        open={deleteSavingsPhaseIndex !== null}
+        title="Supprimer une phase d'épargne"
+        message={`Êtes-vous sûr de vouloir supprimer la phase d'épargne ${deleteSavingsPhaseIndex !== null ? deleteSavingsPhaseIndex + 1 : ""} ? Cette action est irréversible.`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        severity="warning"
+        onConfirm={confirmRemoveSavingsPhase}
+        onCancel={() => setDeleteSavingsPhaseIndex(null)}
+      />
+
+      <ConfirmDialog
+        open={deleteAccountId !== null}
+        title="Supprimer un compte d'investissement"
+        message="Êtes-vous sûr de vouloir supprimer ce compte d'investissement ? Cette action est irréversible et toutes les données associées seront perdues."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        severity="warning"
+        onConfirm={confirmRemoveAccount}
+        onCancel={() => setDeleteAccountId(null)}
+      />
     </Box>
   );
 }

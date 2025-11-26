@@ -5,7 +5,13 @@ Gère les opérations CRUD sur les simulations sauvegardées et les calculs
 de projections (capitalisation, Monte Carlo, retraite, optimisation).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import asyncio
+import json
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db_session
@@ -25,6 +31,9 @@ from app.schemas.projections import (
 from app.services import capitalization as capitalization_service
 from app.services import monte_carlo as monte_carlo_service
 from app.services import simulations as simulation_service
+from app.services.progress import create_progress_task, get_progress
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/simulations", tags=["simulations"])
 
@@ -252,11 +261,98 @@ def compute_retirement_monte_carlo(payload: RetirementMonteCarloInput) -> Retire
     Returns:
         Résultat de la simulation avec percentiles mensuels et scénarios
     """
-    return monte_carlo_service.simulate_retirement_monte_carlo(payload)
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    
+    result = monte_carlo_service.simulate_retirement_monte_carlo(payload)
+    
+    # Log pour vérifier les taxes dans le résultat
+    logger.info(
+        f"Résultat retirement Monte Carlo: "
+        f"nb_taxes={len(result.total_taxes_by_account_type)}, "
+        f"total_IR={result.cumulative_total_income_tax:.2f}, "
+        f"total_PS={result.cumulative_total_social_contributions:.2f}"
+    )
+    if result.total_taxes_by_account_type:
+        for acc_type, tax_data in result.total_taxes_by_account_type.items():
+            logger.info(
+                f"  {acc_type}: IR={tax_data.income_tax:.2f}, "
+                f"PS={tax_data.social_contributions:.2f}"
+            )
+    
+    return result
+
+
+@router.get("/progress/{task_id}")
+async def stream_progress(task_id: str):
+    """
+    Stream de progression en temps réel via Server-Sent Events (SSE).
+    
+    Args:
+        task_id: Identifiant de la tâche de progression
+        
+    Yields:
+        Événements SSE avec les mises à jour de progression
+    """
+    async def event_generator():
+        last_update_time = 0.0
+        initial_sent = False
+        
+        # Créer la tâche si elle n'existe pas encore (le frontend peut commencer à écouter avant le POST)
+        if get_progress(task_id) is None:
+            create_progress_task(total_steps=3, initial_step="initialisation", task_id=task_id)
+            logger.info(f"Tâche de progression créée dans GET: {task_id}")
+        
+        while True:
+            progress_state = get_progress(task_id)
+            
+            if progress_state is None:
+                # Tâche introuvable (ne devrait plus arriver maintenant)
+                yield f"data: {json.dumps({'error': 'Tâche introuvable'})}\n\n"
+                break
+            
+            # Envoyer l'état initial immédiatement, puis les mises à jour
+            if not initial_sent or progress_state.updated_at > last_update_time:
+                data = {
+                    "task_id": progress_state.task_id,
+                    "current_step": progress_state.current_step,
+                    "step_description": progress_state.step_description,
+                    "progress_percent": progress_state.progress_percent,
+                    "total_steps": progress_state.total_steps,
+                    "current_step_index": progress_state.current_step_index,
+                    "message": progress_state.message,
+                    "is_complete": progress_state.is_complete,
+                    "error": progress_state.error,
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+                last_update_time = progress_state.updated_at
+                initial_sent = True
+                
+                logger.info(f"[SSE] Événement envoyé pour {task_id}: {progress_state.progress_percent}% - {progress_state.current_step} - {progress_state.message}")
+                
+                # Si la tâche est terminée, arrêter le stream
+                if progress_state.is_complete:
+                    break
+            
+            # Attendre un peu avant de vérifier à nouveau
+            await asyncio.sleep(0.3)  # Réduire à 0.3s pour plus de réactivité
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Désactiver le buffering pour nginx
+        },
+    )
 
 
 @router.post("/recommended-savings", response_model=RecommendedSavingsResult)
-def compute_recommended_savings(payload: SavingsOptimizationInput) -> RecommendedSavingsResult:
+def compute_recommended_savings(
+    payload: SavingsOptimizationInput,
+    task_id: Optional[str] = Query(None, description="Identifiant de la tâche de progression (optionnel)"),
+) -> RecommendedSavingsResult:
     """
     Optimise l'épargne mensuelle nécessaire pour atteindre un capital cible à l'âge de décès.
     
@@ -267,12 +363,18 @@ def compute_recommended_savings(payload: SavingsOptimizationInput) -> Recommende
     
     Args:
         payload: Paramètres d'optimisation (inclut les paramètres de capitalisation et retraite)
+        task_id: Identifiant optionnel de la tâche de progression (pour le suivi en temps réel)
         
     Returns:
         Résultat de l'optimisation avec l'épargne mensuelle recommandée, les résultats
         des simulations optimisées, et les étapes de convergence
     """
-    return monte_carlo_service.optimize_savings_plan(payload)
+    # Créer la tâche de progression si task_id fourni (si elle n'existe pas déjà)
+    if task_id and get_progress(task_id) is None:
+        create_progress_task(total_steps=3, initial_step="initialisation", task_id=task_id)
+        logger.info(f"Tâche de progression créée dans POST: {task_id}")
+    
+    return monte_carlo_service.optimize_savings_plan(payload, task_id=task_id)
 
 
 def _get_owned_simulation_or_404(db: Session, simulation_id: int, user: User) -> Simulation:

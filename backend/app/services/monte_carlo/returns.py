@@ -193,7 +193,10 @@ def compute_account_gross_return_from_sample(
         Cette fonction recentre le rendement aléatoire pour qu'il corresponde
         à la performance attendue du compte.
         """
-        return sample + (target_mean - base_mean)
+        adjusted = sample + (target_mean - base_mean)
+        # Protection contre les valeurs aberrantes (limite à ±30% par mois)
+        # Cette limite doit correspondre à celle dans retirement.py
+        return max(-0.3, min(0.3, adjusted))
 
     account_type = account.type.value if hasattr(account.type, "value") else str(account.type)
 

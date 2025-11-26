@@ -16,10 +16,17 @@ import {
   Paper,
 } from "@mui/material";
 import { useAuth } from "@/hooks/useAuth";
+import { SEO, createWebPageSchema } from "@/components/seo/SEO";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
+
+  const structuredData = createWebPageSchema(
+    "Connexion - LongView",
+    "Connectez-vous à votre compte LongView pour accéder à vos simulations de retraite sauvegardées.",
+    typeof window !== "undefined" ? window.location.href : "https://longview.app/login",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +52,18 @@ export function LoginPage() {
   };
 
   return (
-    <Container maxWidth="sm" sx={{ py: 8 }}>
-      <Paper elevation={3} sx={{ p: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center">
-          Connexion
-        </Typography>
+    <>
+      <SEO
+        title="Connexion"
+        description="Connectez-vous à votre compte LongView pour accéder à vos simulations de retraite sauvegardées et gérer vos projets."
+        keywords="connexion LongView, compte utilisateur, simulations sauvegardées"
+        structuredData={structuredData}
+      />
+      <Container maxWidth="sm" sx={{ py: 8 }}>
+        <Paper elevation={3} sx={{ p: 4 }}>
+          <Typography variant="h4" component="h1" gutterBottom align="center">
+            Connexion
+          </Typography>
         <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
           Connectez-vous pour accéder à vos projets et simulations
         </Typography>
@@ -102,6 +116,7 @@ export function LoginPage() {
         </Box>
       </Paper>
     </Container>
+    </>
   );
 }
 

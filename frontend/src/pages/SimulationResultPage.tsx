@@ -3,9 +3,11 @@ import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import ReactECharts from "echarts-for-react";
-import { Box, Card, CardContent, Container, Typography, Button } from "@mui/material";
+import { SEO, createWebPageSchema } from "@/components/seo/SEO";
+import { Box, Card, CardContent, Container, Typography, Button, useTheme } from "@mui/material";
 import GridLegacy from "@mui/material/GridLegacy";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import { ResultsSkeleton } from "@/components/shared/SkeletonLoader";
 import { useAuth } from "@/hooks/useAuth";
 import { listSimulations, simulateMonteCarlo } from "@/services/simulations";
 import { OptimizationIterationsChart } from "@/components/results/OptimizationIterationsChart";
@@ -91,6 +93,7 @@ const DEFAULT_MARKET_ASSUMPTIONS: MarketAssumptions = {
 };
 
 export function SimulationResultPage() {
+  const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const navigationState = (location.state as LocationState) ?? null;
@@ -282,6 +285,15 @@ const marketAssumptions =
     enabled: !monteCarloFromState && Boolean(capitalizationInput),
   });
 
+  // Afficher un skeleton loader pendant le chargement
+  if (monteCarloLoading && !monteCarloFromState) {
+    return (
+      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+        <ResultsSkeleton />
+      </Container>
+    );
+  }
+
   const monteCarloResult = monteCarloFromState ?? fetchedMonteCarlo ?? null;
   const retirementMonteCarloResult = retirementMonteCarloFromState ?? null;
   const recommendedSavings =
@@ -349,14 +361,14 @@ const marketAssumptions =
           sx={{
             textAlign: "center",
             py: 6,
-            background: "rgba(255, 255, 255, 0.92)",
+            background: theme.palette.background.paper,
             borderRadius: "1.25rem",
-            boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
-            border: "1px solid rgba(148, 163, 184, 0.2)",
+            boxShadow: theme.shadows[4],
+            border: `1px solid ${theme.palette.divider}`,
           }}
         >
           <CardContent>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2, fontWeight: 700, color: theme.palette.text.primary }}>
               Aucun résultat de simulation disponible
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: "600px", mx: "auto" }}>
@@ -428,8 +440,25 @@ const marketAssumptions =
   const capitalAtRetirement =
     monteCarloResult?.medianFinalCapital ?? result?.projectedCapitalAtRetirement ?? 0;
 
+  const simulationName = simulationRecord?.name as string | undefined ?? draft?.name ?? "Votre projection";
+  const pageDescription = `Résultats de votre simulation de retraite : ${simulationName}. Visualisez vos projections Monte Carlo, votre allocation d'actifs et optimisez votre stratégie d'épargne.`;
+  
+  const structuredData = createWebPageSchema(
+    `Résultats - ${simulationName}`,
+    pageDescription,
+    typeof window !== "undefined" ? window.location.href : "https://longview.app/resultats",
+  );
+
   return (
-    <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+    <>
+      <SEO
+        title={`Résultats - ${simulationName}`}
+        description={pageDescription}
+        keywords="résultats simulation retraite, projections Monte Carlo, allocation actifs, optimisation épargne, analyse retraite"
+        type="article"
+        structuredData={structuredData}
+      />
+      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
       <Box sx={{ mb: { xs: 3, md: 5 } }}>
         <Typography
           variant="h3"
@@ -438,7 +467,7 @@ const marketAssumptions =
           sx={{
             fontSize: { xs: "2rem", md: "2.25rem" },
             fontWeight: 700,
-            color: "#0f172a",
+            color: theme.palette.text.primary,
             mb: 1,
           }}
         >
@@ -532,17 +561,17 @@ const marketAssumptions =
             <GridLegacy item xs={12} sm={6} md={4}>
               <Card
                 sx={{
-                  background: "rgba(255, 255, 255, 0.88)",
+                  background: theme.palette.background.paper,
                   borderRadius: "1.25rem",
-                  boxShadow: "0 18px 34px rgba(148, 163, 184, 0.18)",
-                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  boxShadow: theme.shadows[4],
+                  border: `1px solid ${theme.palette.divider}`,
                   transition: "transform 0.2s ease, box-shadow 0.2s ease",
                   height: "100%",
                   display: "flex",
                   flexDirection: "column",
                   "&:hover": {
                     transform: "translateY(-2px)",
-                    boxShadow: "0 22px 40px rgba(148, 163, 184, 0.25)",
+                    boxShadow: theme.shadows[8],
                   },
                 }}
               >
@@ -551,7 +580,7 @@ const marketAssumptions =
                     variant="h6"
                     component="h3"
                     gutterBottom
-                    sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: "#0f172a" }}
+                    sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: theme.palette.text.primary }}
                   >
                     Capital estimé à la retraite
                   </Typography>
@@ -562,7 +591,7 @@ const marketAssumptions =
                       fontWeight: 700,
                       mb: 1,
                       fontSize: { xs: "1.75rem", md: "2rem" },
-                      color: "#0f172a",
+                      color: theme.palette.text.primary,
                       flex: 1,
                     }}
                   >
@@ -580,17 +609,17 @@ const marketAssumptions =
             <GridLegacy item xs={12} sm={6} md={4}>
               <Card
                 sx={{
-                  background: "rgba(255, 255, 255, 0.88)",
+                  background: theme.palette.background.paper,
                   borderRadius: "1.25rem",
-                  boxShadow: "0 18px 34px rgba(148, 163, 184, 0.18)",
-                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  boxShadow: theme.shadows[4],
+                  border: `1px solid ${theme.palette.divider}`,
                   transition: "transform 0.2s ease, box-shadow 0.2s ease",
                   height: "100%",
                   display: "flex",
                   flexDirection: "column",
                   "&:hover": {
                     transform: "translateY(-2px)",
-                    boxShadow: "0 22px 40px rgba(148, 163, 184, 0.25)",
+                    boxShadow: theme.shadows[8],
                   },
                 }}
               >
@@ -599,7 +628,7 @@ const marketAssumptions =
                     variant="h6"
                     component="h3"
                     gutterBottom
-                    sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: "#0f172a" }}
+                    sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: theme.palette.text.primary }}
                   >
                     Reste à {primaryLifeExpectancy ?? "—"} ans
                   </Typography>
@@ -610,7 +639,7 @@ const marketAssumptions =
                       fontWeight: 700,
                       mb: 1,
                       fontSize: { xs: "1.75rem", md: "2rem" },
-                      color: "#0f172a",
+                      color: theme.palette.text.primary,
                       flex: 1,
                     }}
                   >
@@ -633,17 +662,17 @@ const marketAssumptions =
               <GridLegacy item xs={12} sm={6} md={4}>
                 <Card
                   sx={{
-                    background: "rgba(255, 255, 255, 0.88)",
+                    background: theme.palette.background.paper,
                     borderRadius: "1.25rem",
-                    boxShadow: "0 18px 34px rgba(148, 163, 184, 0.18)",
-                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    boxShadow: theme.shadows[4],
+                    border: `1px solid ${theme.palette.divider}`,
                     transition: "transform 0.2s ease, box-shadow 0.2s ease",
                     height: "100%",
                     display: "flex",
                     flexDirection: "column",
                     "&:hover": {
                       transform: "translateY(-2px)",
-                      boxShadow: "0 22px 40px rgba(148, 163, 184, 0.25)",
+                      boxShadow: theme.shadows[8],
                     },
                   }}
                 >
@@ -652,7 +681,7 @@ const marketAssumptions =
                       variant="h6"
                       component="h3"
                       gutterBottom
-                      sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: "#0f172a" }}
+                      sx={{ fontSize: { xs: "1rem", md: "1.1rem" }, fontWeight: 600, color: theme.palette.text.primary }}
                     >
                       Probabilité de réussite
                     </Typography>
@@ -662,7 +691,7 @@ const marketAssumptions =
                       sx={{
                         fontWeight: 700,
                         fontSize: { xs: "1.75rem", md: "2rem" },
-                        color: "#0f172a",
+                        color: theme.palette.text.primary,
                         flex: 1,
                         display: "flex",
                         alignItems: "center",
@@ -687,7 +716,7 @@ const marketAssumptions =
               }}
             >
               <CardContent sx={{ py: 4 }}>
-                <Typography variant="h5" component="h2" gutterBottom>
+                <Typography variant="h5" component="h2" gutterBottom sx={{ color: theme.palette.text.primary }}>
                   Analyse personnalisée
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
@@ -728,6 +757,7 @@ const marketAssumptions =
         </Box>
       )}
     </Container>
+    </>
   );
 }
 
@@ -740,6 +770,7 @@ function MonteCarloSection({
   isLoading: boolean;
   hasError: boolean;
 }) {
+  const theme = useTheme();
   const monthlySeries = result?.monthlyPercentiles ?? [];
 
   const chartOption = useMemo(() => {
@@ -866,15 +897,15 @@ function MonteCarloSection({
     return (
       <Card
         sx={{
-          background: "rgba(255, 255, 255, 0.92)",
+          background: theme.palette.background.paper,
           borderRadius: "1.25rem",
-          boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
-          border: "1px solid rgba(148, 163, 184, 0.2)",
+          boxShadow: theme.shadows[4],
+          border: `1px solid ${theme.palette.divider}`,
           mb: { xs: 3, md: 4 },
         }}
       >
         <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700, color: theme.palette.text.primary }}>
             Phase de capitalisation – Simulation Monte Carlo
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -889,15 +920,15 @@ function MonteCarloSection({
     return (
       <Card
         sx={{
-          background: "rgba(255, 255, 255, 0.92)",
+          background: theme.palette.background.paper,
           borderRadius: "1.25rem",
-          boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
-          border: "1px solid rgba(148, 163, 184, 0.2)",
+          boxShadow: theme.shadows[4],
+          border: `1px solid ${theme.palette.divider}`,
           mb: { xs: 3, md: 4 },
         }}
       >
         <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700, color: theme.palette.text.primary }}>
             Phase de capitalisation – Simulation Monte Carlo
           </Typography>
           <Typography variant="body2" color="error">
@@ -915,16 +946,16 @@ function MonteCarloSection({
   return (
     <Card
       sx={{
-        background: "rgba(255, 255, 255, 0.92)",
+        background: theme.palette.background.paper,
         borderRadius: "1.25rem",
-        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
-        border: "1px solid rgba(148, 163, 184, 0.2)",
+        boxShadow: theme.shadows[4],
+        border: `1px solid ${theme.palette.divider}`,
         mb: { xs: 3, md: 4 },
       }}
     >
       <CardContent sx={{ p: { xs: 2, md: 3 } }}>
         <Box sx={{ mb: 2 }}>
-          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700, color: theme.palette.text.primary }}>
             Phase de capitalisation – Simulation Monte Carlo
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
@@ -960,17 +991,17 @@ function MonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Capital pessimiste (10%)
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary }}>
                   {formatCurrency(result.percentile10, 0)}
                 </Typography>
               </CardContent>
@@ -979,17 +1010,17 @@ function MonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Capital médian
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary }}>
                   {formatCurrency(result.percentile50, 0)}
                 </Typography>
               </CardContent>
@@ -998,17 +1029,17 @@ function MonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Capital optimiste (90%)
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary }}>
                   {formatCurrency(result.percentile90, 0)}
                 </Typography>
               </CardContent>
@@ -1017,17 +1048,17 @@ function MonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Moyenne des tirages
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary }}>
                   {formatCurrency(result.meanFinalCapital, 0)}
                 </Typography>
                 {!result.confidenceReached && (
@@ -1062,6 +1093,7 @@ function CombinedTrajectorySection({
   accumulation: MonteCarloResult | null;
   retirement: RetirementScenarioResults | null;
 }) {
+  const theme = useTheme();
   const combinedPoints = useMemo(() => {
     const points: Array<{
       age: number;
@@ -1150,9 +1182,10 @@ function CombinedTrajectorySection({
           }
 
           const phase = index < retirementStartIndex ? "Phase de capitalisation" : "Phase de retraite";
+          const phaseColor = theme.palette.mode === "dark" ? "#94a3b8" : "#64748b";
           return [
             `<strong>${point.label}</strong>`,
-            `<em style="color: #64748b;">${phase}</em>`,
+            `<em style="color: ${phaseColor};">${phase}</em>`,
             `Scénario pessimiste: ${formatCurrency(point.pessimistic, 0)}`,
             `Scénario médian: ${formatCurrency(point.median, 0)}`,
             `Scénario optimiste: ${formatCurrency(point.optimistic, 0)}`,
@@ -1201,7 +1234,7 @@ function CombinedTrajectorySection({
             symbol: "none",
             lineStyle: {
               type: "dashed",
-              color: "#64748b",
+              color: theme.palette.mode === "dark" ? "#94a3b8" : "#64748b",
               width: 2,
             },
             label: {
@@ -1294,16 +1327,16 @@ function CombinedTrajectorySection({
   return (
     <Card
       sx={{
-        background: "rgba(255, 255, 255, 0.92)",
+        background: theme.palette.background.paper,
         borderRadius: "1.25rem",
-        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
-        border: "1px solid rgba(148, 163, 184, 0.2)",
+        boxShadow: theme.shadows[4],
+        border: `1px solid ${theme.palette.divider}`,
         mb: { xs: 3, md: 4 },
       }}
     >
       <CardContent sx={{ p: { xs: 2, md: 3 } }}>
         <Box sx={{ mb: 2 }}>
-          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700, color: theme.palette.text.primary }}>
             Trajectoire globale (capitalisation + retraite)
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
@@ -1341,6 +1374,7 @@ function RetirementMonteCarloSection({
   targetMonthlyIncome: number;
   pensionMonthlyIncome: number;
 }) {
+  const theme = useTheme();
   if (!results) {
     return null;
   }
@@ -1398,6 +1432,26 @@ function RetirementMonteCarloSection({
           if (med) {
             lines.push(`Scénario médian: ${formatCurrency(med.percentile50, 0)}`);
             lines.push(`Retraits cumulés: ${formatCurrency(med.cumulativeWithdrawal, 0)}`);
+            if (med.totalTaxes && med.totalTaxes > 0) {
+              lines.push(`Impôts ce mois: ${formatCurrency(med.totalTaxes, 0)}`);
+              if (med.taxesByAccountType && med.taxesByAccountType.length > 0) {
+                const accountTypeLabels: Record<string, string> = {
+                  pea: "PEA",
+                  per: "PER",
+                  assurance_vie: "Assurance-vie",
+                  livret: "Livrets",
+                  cto: "CTO",
+                  crypto: "Crypto",
+                  autre: "Autre",
+                };
+                med.taxesByAccountType.forEach((tax) => {
+                  const label = accountTypeLabels[tax.accountType] || tax.accountType;
+                  if (tax.incomeTax + tax.socialContributions > 0) {
+                    lines.push(`  ${label}: ${formatCurrency(tax.incomeTax + tax.socialContributions, 0)}`);
+                  }
+                });
+              }
+            }
           }
           if (opt) {
             lines.push(`Scénario optimiste (médian): ${formatCurrency(opt.percentile50, 0)}`);
@@ -1460,16 +1514,16 @@ function RetirementMonteCarloSection({
   return (
     <Card
       sx={{
-        background: "rgba(255, 255, 255, 0.92)",
+        background: theme.palette.background.paper,
         borderRadius: "1.25rem",
-        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
-        border: "1px solid rgba(148, 163, 184, 0.2)",
+        boxShadow: theme.shadows[4],
+        border: `1px solid ${theme.palette.divider}`,
         mb: { xs: 3, md: 4 },
       }}
     >
       <CardContent sx={{ p: { xs: 2, md: 3 } }}>
         <Box sx={{ mb: 2 }}>
-          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700 }}>
+          <Typography variant="h5" component="h2" gutterBottom sx={{ fontSize: { xs: "1.5rem", md: "1.75rem" }, fontWeight: 700, color: theme.palette.text.primary }}>
             Phase de retraite – Simulation Monte Carlo
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
@@ -1486,17 +1540,17 @@ function RetirementMonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Capital pessimiste (10%)
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a", mb: 0.5 }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary, mb: 0.5 }}>
                   {formatCurrency(results.pessimistic.medianFinalCapital, 0)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
@@ -1508,17 +1562,17 @@ function RetirementMonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Capital médian
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary }}>
                   {formatCurrency(results.median.medianFinalCapital, 0)}
                 </Typography>
               </CardContent>
@@ -1527,17 +1581,17 @@ function RetirementMonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Capital optimiste (90%)
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a", mb: 0.5 }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary, mb: 0.5 }}>
                   {formatCurrency(results.optimistic.medianFinalCapital, 0)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
@@ -1549,17 +1603,17 @@ function RetirementMonteCarloSection({
           <GridLegacy item xs={12} sm={6} md={3}>
             <Card
               sx={{
-                background: "rgba(255, 255, 255, 0.88)",
+                background: theme.palette.background.paper,
                 borderRadius: "1rem",
-                boxShadow: "0 8px 16px rgba(148, 163, 184, 0.12)",
-                border: "1px solid rgba(148, 163, 184, 0.15)",
+                boxShadow: theme.shadows[2],
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: "0.95rem", fontWeight: 600, color: theme.palette.text.primary }}>
                   Retraits cumulés (médian)
                 </Typography>
-                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: "#0f172a" }}>
+                <Typography variant="h6" component="p" sx={{ fontWeight: 700, fontSize: "1.5rem", color: theme.palette.text.primary }}>
                   {formatCurrency(cumulativeWithdrawalMedian, 0)}
                 </Typography>
               </CardContent>
@@ -1582,6 +1636,208 @@ function RetirementMonteCarloSection({
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
             Aucune donnée de simulation retraite disponible.
           </Typography>
+        )}
+
+        {/* Section des taxes */}
+        {results.median.totalTaxesByAccountType && Object.keys(results.median.totalTaxesByAccountType).length > 0 && (
+            <Box sx={{ mt: 4 }}>
+            <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: { xs: "1.1rem", md: "1.25rem" }, fontWeight: 700, mb: 2, color: theme.palette.text.primary }}>
+              Impôts sur les retraits par type de placement
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3, fontSize: "0.9rem" }}>
+              Répartition des impôts et prélèvements sociaux payés sur les retraits pendant toute la phase de retraite
+            </Typography>
+            
+            <GridLegacy container spacing={2} sx={{ mb: 2 }}>
+              <GridLegacy item xs={12} sm={6} md={4}>
+                <Card sx={{ 
+                  background: theme.palette.mode === "dark" ? "rgba(239, 68, 68, 0.15)" : "rgba(239, 68, 68, 0.05)", 
+                  border: `1px solid ${theme.palette.mode === "dark" ? "rgba(239, 68, 68, 0.4)" : "rgba(239, 68, 68, 0.2)"}` 
+                }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem", mb: 0.5 }}>
+                      Impôt sur le revenu total
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.25rem", color: theme.palette.error.main }}>
+                      {formatCurrency(results.median.cumulativeTotalIncomeTax ?? 0, 0)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </GridLegacy>
+              <GridLegacy item xs={12} sm={6} md={4}>
+                <Card sx={{ 
+                  background: theme.palette.mode === "dark" ? "rgba(59, 130, 246, 0.15)" : "rgba(59, 130, 246, 0.05)", 
+                  border: `1px solid ${theme.palette.mode === "dark" ? "rgba(59, 130, 246, 0.4)" : "rgba(59, 130, 246, 0.2)"}` 
+                }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem", mb: 0.5 }}>
+                      Prélèvements sociaux total
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.25rem", color: theme.palette.primary.main }}>
+                      {formatCurrency(results.median.cumulativeTotalSocialContributions ?? 0, 0)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </GridLegacy>
+              <GridLegacy item xs={12} sm={6} md={4}>
+                <Card sx={{ 
+                  background: theme.palette.mode === "dark" ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.05)", 
+                  border: `1px solid ${theme.palette.mode === "dark" ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.2)"}` 
+                }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem", mb: 0.5 }}>
+                      Total des impôts
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.25rem", color: theme.palette.success.main }}>
+                      {formatCurrency(results.median.cumulativeTotalTaxes ?? 0, 0)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </GridLegacy>
+            </GridLegacy>
+
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="subtitle1" component="h4" gutterBottom sx={{ fontWeight: 600, mb: 2, color: theme.palette.text.primary }}>
+                Détail par type de placement
+              </Typography>
+              
+              {/* Total des retraits bruts */}
+              {(() => {
+                const totalGrossWithdrawals = Object.values(results.median.totalTaxesByAccountType).reduce(
+                  (sum, taxData) => sum + (taxData.grossWithdrawal ?? 0),
+                  0
+                );
+                const totalNetWithdrawals = Object.values(results.median.totalTaxesByAccountType).reduce(
+                  (sum, taxData) => sum + (taxData.netWithdrawal ?? 0),
+                  0
+                );
+                const totalTaxes = Object.values(results.median.totalTaxesByAccountType).reduce(
+                  (sum, taxData) => sum + (taxData.incomeTax ?? 0) + (taxData.socialContributions ?? 0),
+                  0
+                );
+                
+                return (
+                  <Box sx={{ 
+                    mb: 3, 
+                    p: 2, 
+                    background: theme.palette.mode === "dark" ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.05)", 
+                    borderRadius: 2, 
+                    border: `1px solid ${theme.palette.mode === "dark" ? "rgba(37, 99, 235, 0.4)" : "rgba(37, 99, 235, 0.2)"}` 
+                  }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, fontSize: "1rem", color: theme.palette.text.primary }}>
+                      Totaux sur toute la période de retraite
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.75rem", mb: 1.5, display: "block", fontStyle: "italic" }}>
+                      Ces montants représentent la somme de tous les retraits effectués pendant toute la période de retraite, pas le capital restant.
+                    </Typography>
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Retraits bruts totaux:
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "1rem" }}>
+                          {formatCurrency(totalGrossWithdrawals, 0)}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Impôts totaux:
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: "#dc2626" }}>
+                          {formatCurrency(totalTaxes, 0)}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(148, 163, 184, 0.3)", pt: 1, mt: 0.5 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          Retraits nets totaux:
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "1rem", color: "#059669" }}>
+                          {formatCurrency(totalNetWithdrawals, 0)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                );
+              })()}
+              
+              <GridLegacy container spacing={2}>
+                {Object.entries(results.median.totalTaxesByAccountType).map(([accountType, taxData]) => {
+                  const accountTypeLabels: Record<string, string> = {
+                    pea: "PEA",
+                    per: "PER",
+                    assurance_vie: "Assurance-vie",
+                    livret: "Livrets réglementés",
+                    cto: "CTO",
+                    crypto: "Cryptomonnaies",
+                    autre: "Autre",
+                  };
+                  const label = accountTypeLabels[accountType] || accountType;
+                  
+                  return (
+                    <GridLegacy item xs={12} sm={6} md={4} key={accountType}>
+                      <Card sx={{ background: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, fontSize: "0.95rem", color: theme.palette.text.primary }}>
+                            {label}
+                          </Typography>
+                          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
+                                Retraits bruts:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.8rem" }}>
+                                {formatCurrency(taxData.grossWithdrawal, 0)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
+                                Plus-values:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.8rem" }}>
+                                {formatCurrency(taxData.capitalGain, 0)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(148, 163, 184, 0.2)", pt: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
+                                IR:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.8rem", color: "#dc2626" }}>
+                                {formatCurrency(taxData.incomeTax, 0)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
+                                PS:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.8rem", color: "#2563eb" }}>
+                                {formatCurrency(taxData.socialContributions, 0)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(148, 163, 184, 0.3)", pt: 0.5, mt: 0.5 }}>
+                              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                                Total impôts:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 700, fontSize: "0.85rem", color: "#059669" }}>
+                                {formatCurrency(taxData.incomeTax + taxData.socialContributions, 0)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", mt: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
+                                Retraits nets:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.8rem", color: "#059669" }}>
+                                {formatCurrency(taxData.netWithdrawal, 0)}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </GridLegacy>
+                  );
+                })}
+              </GridLegacy>
+            </Box>
+          </Box>
         )}
       </CardContent>
     </Card>

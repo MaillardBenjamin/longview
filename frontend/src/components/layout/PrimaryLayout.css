@@ -5,6 +5,12 @@
   background: linear-gradient(180deg, #f7fbff 0%, #ffffff 40%);
   color: #0f172a;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.layout--dark {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 40%);
+  color: #f8fafc;
 }
 
 .layout__header {
@@ -116,6 +122,12 @@
   text-align: center;
   color: #475569;
   background: #e2e8f0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.layout--dark .layout__footer {
+  color: #94a3b8;
+  background: #1e293b;
 }
 
 .layout__footer-nav {
@@ -134,6 +146,10 @@
   transition: color 0.2s ease;
 }
 
+.layout--dark .layout__footer-link {
+  color: #94a3b8;
+}
+
 .layout__footer-link:hover {
   color: #0ea5e9;
   text-decoration: underline;
@@ -141,6 +157,10 @@
 
 .layout__footer-separator {
   color: #94a3b8;
+}
+
+.layout--dark .layout__footer-separator {
+  color: #64748b;
 }
 
 @media (max-width: 768px) {

@@ -175,6 +175,8 @@ function mapInvestmentAccountsToApi(accounts: SimulationInput["investmentAccount
     allocation_obligations: account.allocationObligations,
     livret_breakdown: mapLivretBreakdownToApi(account.livretBreakdown),
     expected_performance: account.expectedPerformance,
+    opening_date_age: account.openingDateAge,
+    initial_cost_basis: account.initialCostBasis,
   }));
 }
 
@@ -283,9 +285,55 @@ function buildRetirementMonteCarloResultFromApi(data: any): RetirementMonteCarlo
       percentile50: point.percentile50 ?? point.percentile_50 ?? 0,
       percentile90: point.percentile90 ?? point.percentile_90 ?? 0,
       percentileMax: point.percentileMax ?? point.percentile_max ?? 0,
+      taxesByAccountType: (point.taxesByAccountType ?? point.taxes_by_account_type ?? []).map((tax: any) => ({
+        accountType: tax.accountType ?? tax.account_type ?? "",
+        grossWithdrawal: tax.grossWithdrawal ?? tax.gross_withdrawal ?? 0,
+        capitalGain: tax.capitalGain ?? tax.capital_gain ?? 0,
+        incomeTax: tax.incomeTax ?? tax.income_tax ?? 0,
+        socialContributions: tax.socialContributions ?? tax.social_contributions ?? 0,
+        netWithdrawal: tax.netWithdrawal ?? tax.net_withdrawal ?? 0,
+      })),
+      totalIncomeTax: point.totalIncomeTax ?? point.total_income_tax ?? 0,
+      totalSocialContributions: point.totalSocialContributions ?? point.total_social_contributions ?? 0,
+      totalTaxes: point.totalTaxes ?? point.total_taxes ?? 0,
     })),
-  };
-}
+      totalTaxesByAccountType: (() => {
+        const taxes = data.totalTaxesByAccountType ?? data.total_taxes_by_account_type ?? {};
+        console.log("Taxes reçues du backend:", taxes);
+        if (Object.keys(taxes).length === 0) {
+          console.warn("Aucune taxe reçue du backend!");
+        }
+        // Convertir les valeurs en format frontend si nécessaire
+        const converted: Record<string, any> = {};
+        for (const [key, value] of Object.entries(taxes)) {
+          if (value && typeof value === 'object') {
+            converted[key] = {
+              accountType: value.accountType ?? value.account_type ?? key,
+              grossWithdrawal: value.grossWithdrawal ?? value.gross_withdrawal ?? 0,
+              capitalGain: value.capitalGain ?? value.capital_gain ?? 0,
+              incomeTax: value.incomeTax ?? value.income_tax ?? 0,
+              socialContributions: value.socialContributions ?? value.social_contributions ?? 0,
+              netWithdrawal: value.netWithdrawal ?? value.net_withdrawal ?? 0,
+            };
+          }
+        }
+        console.log("Taxes converties:", converted);
+        return converted;
+      })(),
+      cumulativeTotalIncomeTax: data.cumulativeTotalIncomeTax ?? data.cumulative_total_income_tax ?? 0,
+      cumulativeTotalSocialContributions: data.cumulativeTotalSocialContributions ?? data.cumulative_total_social_contributions ?? 0,
+      cumulativeTotalTaxes: data.cumulativeTotalTaxes ?? data.cumulative_total_taxes ?? 0,
+    };
+    
+    console.log("Résultat final buildRetirementMonteCarloResultFromApi:", {
+      hasTaxes: Object.keys(result.totalTaxesByAccountType ?? {}).length > 0,
+      totalIncomeTax: result.cumulativeTotalIncomeTax,
+      totalSocialContributions: result.cumulativeTotalSocialContributions,
+      totalTaxes: result.cumulativeTotalTaxes,
+    });
+    
+    return result;
+  }
 
 /**
  * Construit les résultats des scénarios de retraite depuis la réponse API.
@@ -423,6 +471,11 @@ export async function previewCapitalization(
     savings_phases: mapSavingsPhasesToApi(payload.savingsPhases ?? []),
     investment_accounts: mapInvestmentAccountsToApi(payload.investmentAccounts),
     market_assumptions: mapMarketAssumptionsToApi(payload.marketAssumptions),
+    tax_parameters: payload.taxParameters ? {
+      tmi_savings_phase: payload.taxParameters.tmiSavingsPhase,
+      tmi_retirement_phase: payload.taxParameters.tmiRetirementPhase,
+      is_couple: payload.taxParameters.isCouple,
+    } : undefined,
   });
 
   const data = response.data;
@@ -453,6 +506,11 @@ export async function simulateMonteCarlo(payload: SimulationInput): Promise<Mont
     savings_phases: mapSavingsPhasesToApi(payload.savingsPhases ?? []),
     investment_accounts: mapInvestmentAccountsToApi(payload.investmentAccounts),
     market_assumptions: mapMarketAssumptionsToApi(payload.marketAssumptions),
+    tax_parameters: payload.taxParameters ? {
+      tmi_savings_phase: payload.taxParameters.tmiSavingsPhase,
+      tmi_retirement_phase: payload.taxParameters.tmiRetirementPhase,
+      is_couple: payload.taxParameters.isCouple,
+    } : undefined,
   });
 
   return buildMonteCarloResultFromApi(response.data);
@@ -529,10 +587,35 @@ export async function simulateRetirementMonteCarlo(
     target_monthly_income: simulation.targetMonthlyIncome ?? 0,
     state_pension_monthly_income: simulation.statePensionMonthlyIncome ?? 0,
     additional_income_streams: mapAdditionalIncomeStreamsToApi(simulation.additionalIncomeStreams),
+    tax_parameters: simulation.taxParameters ? {
+      tmi_savings_phase: simulation.taxParameters.tmiSavingsPhase,
+      tmi_retirement_phase: simulation.taxParameters.tmiRetirementPhase,
+      is_couple: simulation.taxParameters.isCouple,
+    } : undefined,
   });
 
   return buildRetirementMonteCarloResultFromApi(response.data);
 }
+
+/**
+ * Interface pour les événements de progression.
+ */
+export interface ProgressEvent {
+  task_id: string;
+  current_step: string;
+  step_description: string;
+  progress_percent: number;
+  total_steps: number;
+  current_step_index: number;
+  message: string;
+  is_complete: boolean;
+  error?: string | null;
+}
+
+/**
+ * Callback pour les événements de progression.
+ */
+export type ProgressCallback = (progress: ProgressEvent) => void;
 
 /**
  * Optimise l'épargne mensuelle nécessaire pour atteindre un capital cible à l'âge de décès.
@@ -541,16 +624,20 @@ export async function simulateRetirementMonteCarlo(
  * d'épargne optimal via un algorithme de recherche par bissection.
  * 
  * @param simulation - Paramètres complets de la simulation
+ * @param onProgress - Callback optionnel pour recevoir les événements de progression
  * @returns Résultat de l'optimisation avec épargne recommandée, simulations optimisées et étapes
  */
 export async function optimizeSavingsPlan(
   simulation: SimulationInput,
+  onProgress?: ProgressCallback,
+  capitalizationOnly?: boolean,
+  calculateMinimumSavings?: boolean,
 ): Promise<{
   scale: number;
   recommendedMonthlySavings: number;
   minimumCapitalAtRetirement: number;
   monteCarloResult: MonteCarloResult;
-  retirementResults: RetirementScenarioResults;
+  retirementResults: RetirementScenarioResults | null;
   steps: OptimizationStep[];
   residualError: number;
   residualErrorRatio: number;
@@ -573,11 +660,18 @@ export async function optimizeSavingsPlan(
     target_monthly_income: simulation.targetMonthlyIncome ?? 0,
     state_pension_monthly_income: simulation.statePensionMonthlyIncome ?? 0,
     additional_income_streams: mapAdditionalIncomeStreamsToApi(simulation.additionalIncomeStreams),
+    tax_parameters: simulation.taxParameters ? {
+      tmi_savings_phase: simulation.taxParameters.tmiSavingsPhase,
+      tmi_retirement_phase: simulation.taxParameters.tmiRetirementPhase,
+      is_couple: simulation.taxParameters.isCouple,
+    } : undefined,
     confidence_level: 0.9,
     tolerance_ratio: 0.01,
     max_iterations: 24,
     batch_size: 500,
     target_final_capital: 0,
+    capitalization_only: capitalizationOnly ?? false,
+    calculate_minimum_savings: calculateMinimumSavings ?? true,
   };
 
   // Debug: log des paramètres envoyés
@@ -591,7 +685,108 @@ export async function optimizeSavingsPlan(
     additionalIncomeStreamsCount: payload.additional_income_streams?.length ?? 0,
   });
 
-  const response = await apiClient.post("/simulations/recommended-savings", payload);
+  // Générer un task_id unique pour le suivi de progression
+  const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  // Démarrer l'écoute SSE si un callback est fourni
+  let abortController: AbortController | null = null;
+  if (onProgress) {
+    // Construire l'URL SSE avec la base URL de l'API
+    const baseURL = apiClient.defaults.baseURL || "http://localhost:8000/api/v1";
+    const sseUrl = `${baseURL}/simulations/progress/${taskId}`;
+    
+    // Utiliser fetch avec ReadableStream pour pouvoir ajouter les headers d'authentification
+    abortController = new AbortController();
+    const token = localStorage.getItem("lv_token");
+    
+    fetch(sseUrl, {
+      method: "GET",
+      headers: token ? {
+        Authorization: `Bearer ${token}`,
+      } : {},
+      signal: abortController.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        
+        if (!reader) {
+          console.error("Impossible de lire le stream SSE");
+          return;
+        }
+        
+        let buffer = "";
+        
+        console.log("Connexion SSE établie pour", taskId);
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log("Stream SSE terminé");
+            break;
+          }
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          
+          for (const line of lines) {
+            if (line.trim() === "") continue; // Ignorer les lignes vides
+            
+            if (line.startsWith("data: ")) {
+              try {
+                const data = line.slice(6); // Enlever "data: "
+                const progress: ProgressEvent = JSON.parse(data);
+                console.log("Événement de progression reçu:", {
+                  task_id: progress.task_id,
+                  current_step: progress.current_step,
+                  step_description: progress.step_description,
+                  progress_percent: progress.progress_percent,
+                  message: progress.message,
+                  is_complete: progress.is_complete,
+                });
+                onProgress(progress);
+                
+                // Fermer la connexion si la tâche est terminée
+                if (progress.is_complete || progress.error) {
+                  console.log("Tâche terminée, fermeture de la connexion SSE");
+                  abortController?.abort();
+                  return;
+                }
+              } catch (error) {
+                console.error("Erreur lors du parsing de l'événement de progression:", error, "Ligne:", line);
+              }
+            } else if (line.trim() !== "" && !line.startsWith(":")) {
+              // Log les lignes qui ne sont pas des données SSE pour déboguer
+              console.log("Ligne SSE non reconnue:", line);
+            }
+          }
+        }
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          console.error("Erreur SSE:", error);
+        }
+      });
+  }
+  
+  // Ajouter task_id comme query parameter
+  const response = await apiClient.post(
+    `/simulations/recommended-savings?task_id=${encodeURIComponent(taskId)}`,
+    payload
+  );
+  
+  // Fermer la connexion SSE après la réponse
+  if (abortController) {
+    // Attendre un peu pour laisser le temps au dernier événement d'arriver
+    setTimeout(() => {
+      abortController?.abort();
+    }, 1000);
+  }
 
   const data = response.data;
   
@@ -618,7 +813,8 @@ export async function optimizeSavingsPlan(
     throw new Error("Réponse API invalide : données Monte Carlo manquantes.");
   }
   
-  if (!retirementData) {
+  // retirementData peut être null si capitalization_only est True
+  if (!capitalizationOnly && !retirementData) {
     console.error("Réponse API invalide : retirementResults/retirement_results manquant. Données complètes:", JSON.stringify(data, null, 2));
     throw new Error("Réponse API invalide : données de retraite manquantes.");
   }
@@ -628,7 +824,7 @@ export async function optimizeSavingsPlan(
     recommendedMonthlySavings: recommendedSavings,
     minimumCapitalAtRetirement: minCapital,
     monteCarloResult: buildMonteCarloResultFromApi(monteCarloData),
-    retirementResults: buildRetirementScenarioResultsFromApi(retirementData),
+    retirementResults: retirementData ? buildRetirementScenarioResultsFromApi(retirementData) : null,
     steps: (data.steps ?? []).map((step: any) => ({
       iteration: step.iteration ?? 0,
       scale: step.scale ?? 0,
