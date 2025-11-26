@@ -91,7 +91,18 @@ npm run dev
 4. Définissez vos objectifs de retraite (revenu cible, pension de l'État)
 5. Lancez la simulation pour obtenir l'épargne mensuelle recommandée
 
+## 📚 Documentation
+
+Une documentation complète est disponible dans le répertoire [`documentation/`](documentation/) :
+
+- **[API.md](documentation/API.md)** : Documentation complète de l'API REST
+- **[ALGORITHMES.md](documentation/ALGORITHMES.md)** : Description détaillée des algorithmes utilisés (Monte Carlo, optimisation, taxes)
+- **[ARCHITECTURE.md](documentation/ARCHITECTURE.md)** : Architecture technique de l'application
+- **[DEPLOIEMENT.md](documentation/DEPLOIEMENT.md)** : Guide de déploiement en production
+
 ## 🧮 Modèle mathématique
+
+Pour une description détaillée des algorithmes, voir [ALGORITHMES.md](documentation/ALGORITHMES.md).
 
 ### Simulation Monte Carlo
 
@@ -104,11 +115,13 @@ La simulation utilise des tirages aléatoires corrélés pour modéliser l'incer
 
 ### Optimisation
 
-L'optimisation utilise une recherche par dichotomie (bisection) pour trouver le facteur d'échelle optimal des épargnes mensuelles :
+L'optimisation utilise une recherche par dichotomie (bisection) avec itérations adaptatives :
 
-1. **Évaluation** : Pour chaque facteur d'échelle, exécution d'une simulation complète (capitalisation + retraite)
-2. **Pénalité pour épuisement précoce** : Application d'une pénalité si le capital médian s'épuise avant l'espérance de vie
-3. **Recherche** : Exploration de l'espace des solutions jusqu'à trouver un facteur satisfaisant
+1. **Évaluation initiale** : Test avec facteur 0 (épargnes existantes uniquement)
+2. **Recherche de borne supérieure** : Doublement du facteur jusqu'à trouver une solution suffisante
+3. **Dichotomie adaptative** : Réduction progressive de l'intervalle avec nombre d'itérations Monte Carlo adaptatif (100 → 1000+)
+4. **Évaluation finale** : Réévaluation avec le maximum d'itérations pour précision maximale
+5. **Pénalité pour épuisement précoce** : Application d'une pénalité si le capital médian s'épuise avant l'espérance de vie
 
 ## 📁 Structure du projet
 
