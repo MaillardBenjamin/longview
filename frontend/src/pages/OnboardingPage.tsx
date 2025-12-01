@@ -314,6 +314,8 @@ export function OnboardingPage() {
         optimizationScale: result.scale,
         monteCarloResult: result.monteCarloResult,
         retirementMonteCarloResult: result.retirementResults,
+        optimalMonteCarloResult: result.optimalMonteCarloResult,
+        optimalRetirementResults: result.optimalRetirementResults,
         optimizationSteps: result.steps,
         optimizationResidualError: result.residualError,
         optimizationResidualErrorRatio: result.residualErrorRatio,

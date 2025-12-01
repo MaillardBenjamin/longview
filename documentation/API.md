@@ -427,3 +427,5 @@ Le frontend convertit automatiquement entre `camelCase` et `snake_case`.
 
 Actuellement, il n'y a pas de limite de taux. Cela peut être ajouté en production selon les besoins.
 
+
+

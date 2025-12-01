@@ -114,3 +114,5 @@ Si vous avez des questions sur la documentation ou l'utilisation de LongView :
 2. Recherchez dans les issues existantes
 3. Ouvrez une nouvelle issue si nécessaire
 
+
+

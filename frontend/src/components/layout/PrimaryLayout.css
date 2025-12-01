@@ -18,11 +18,17 @@
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 2rem;
-  background-color: rgba(15, 23, 42, 0.95);
-  color: #f8fafc;
+  background-color: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
   position: sticky;
   top: 0;
   z-index: 10;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.layout--dark .layout__header {
+  background-color: rgba(15, 23, 42, 0.95);
+  color: #f8fafc;
 }
 
 .layout__brand {
@@ -34,8 +40,13 @@
   font-weight: 700;
   font-size: 1.5rem;
   letter-spacing: 0.02em;
-  color: #f8fafc;
+  color: #0f172a;
   text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.layout--dark .layout__brand a {
+  color: #f8fafc;
 }
 
 .layout__nav {
@@ -48,8 +59,13 @@
   align-items: center;
   gap: 1.5rem;
   font-size: 0.875rem;
-  color: #cbd5e1;
+  color: #475569;
   margin: 0 1rem;
+  transition: color 0.3s ease;
+}
+
+.layout--dark .layout__context {
+  color: #cbd5e1;
 }
 
 .layout__context-item {
@@ -60,19 +76,33 @@
 
 .layout__context-label {
   font-weight: 500;
+  color: #64748b;
+  transition: color 0.3s ease;
+}
+
+.layout--dark .layout__context-label {
   color: #94a3b8;
 }
 
 .layout__context-value {
   font-weight: 600;
+  color: #0f172a;
+  transition: color 0.3s ease;
+}
+
+.layout--dark .layout__context-value {
   color: #e2e8f0;
 }
 
 .layout__nav-link {
-  color: #e2e8f0;
+  color: #475569;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.2s ease;
+}
+
+.layout--dark .layout__nav-link {
+  color: #e2e8f0;
 }
 
 .layout__nav-link.active,
@@ -89,6 +119,11 @@
 
 .layout__user {
   font-weight: 500;
+  color: #0ea5e9;
+  transition: color 0.3s ease;
+}
+
+.layout--dark .layout__user {
   color: #bae6fd;
 }
 

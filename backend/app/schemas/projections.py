@@ -66,6 +66,27 @@ class AdditionalIncome(BaseModel):
     start_age: Optional[PositiveFloat] = None
 
 
+class ChargeCategory(str, Enum):
+    HOUSING_LOAN = "housing_loan"
+    CONSUMER_LOAN = "consumer_loan"
+    PENSION = "pension"
+    OTHER = "other"
+
+
+class HouseholdCharge(BaseModel):
+    id: str
+    label: str
+    category: ChargeCategory
+    monthly_amount: NonNegativeFloat
+    until_age: Optional[PositiveFloat] = None
+
+
+class ChildCharge(BaseModel):
+    child_name: str
+    monthly_amount: NonNegativeFloat
+    until_age: Optional[PositiveFloat] = None
+
+
 class InvestmentAccount(BaseModel):
     id: Optional[str] = None
     type: InvestmentAccountType
@@ -206,6 +227,14 @@ class RetirementMonteCarloInput(BaseModel):
     target_monthly_income: NonNegativeFloat
     state_pension_monthly_income: NonNegativeFloat
     additional_income_streams: Optional[List[AdditionalIncome]] = None
+    household_charges: Optional[List[HouseholdCharge]] = Field(
+        default_factory=list,
+        description="Charges du foyer qui peuvent continuer pendant la retraite"
+    )
+    child_charges: Optional[List[ChildCharge]] = Field(
+        default_factory=list,
+        description="Charges liées aux enfants qui peuvent continuer pendant la retraite"
+    )
     tax_parameters: Optional[TaxParameters] = Field(
         default=None,
         description="Paramètres fiscaux pour la phase de retraite"
@@ -263,6 +292,14 @@ class SavingsOptimizationInput(BaseModel):
     target_monthly_income: NonNegativeFloat
     state_pension_monthly_income: NonNegativeFloat
     additional_income_streams: Optional[List[AdditionalIncome]] = None
+    household_charges: Optional[List[HouseholdCharge]] = Field(
+        default_factory=list,
+        description="Charges du foyer qui peuvent continuer pendant la retraite"
+    )
+    child_charges: Optional[List[ChildCharge]] = Field(
+        default_factory=list,
+        description="Charges liées aux enfants qui peuvent continuer pendant la retraite"
+    )
     tax_parameters: Optional[TaxParameters] = Field(
         default=None,
         description="Paramètres fiscaux pour les phases d'épargne et de retraite"
@@ -290,6 +327,14 @@ class RecommendedSavingsResult(BaseModel):
     retirement_results: Optional[RetirementScenarioResults] = Field(
         default=None,
         description="Courbes avec versements réels (None si capitalization_only=True)"
+    )
+    optimal_monte_carlo_result: Optional[MonteCarloResult] = Field(
+        default=None,
+        description="Courbes avec épargne optimale (capitalisation)"
+    )
+    optimal_retirement_results: Optional[RetirementScenarioResults] = Field(
+        default=None,
+        description="Courbes avec épargne optimale (retraite)"
     )
     steps: List[OptimizationStep] = Field(default_factory=list)
     residual_error: float

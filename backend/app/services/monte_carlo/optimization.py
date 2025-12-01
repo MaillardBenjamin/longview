@@ -6,11 +6,12 @@ optimal des épargnes mensuelles permettant d'atteindre un capital cible à la f
 """
 
 import logging
-from typing import List, NamedTuple
+from typing import Dict, List, NamedTuple
 
 from app.schemas.projections import (
     InvestmentAccount,
     MonteCarloInput,
+    MonteCarloPercentilePoint,
     MonteCarloResult,
     OptimizationStep,
     RecommendedSavingsResult,
@@ -30,6 +31,28 @@ from app.services.progress import (
 )
 
 logger = logging.getLogger("uvicorn.error").getChild("monte_carlo.optimization")
+
+# Configuration du logger de débogage fichier
+import os
+debug_logger = logging.getLogger("debug_optimization")
+debug_logger.setLevel(logging.DEBUG)
+# Éviter d'ajouter plusieurs handlers si le module est rechargé
+if not debug_logger.handlers:
+    # Utiliser un chemin absolu ou relatif simple
+    # Si on est dans backend/, on écrit juste debug_optimization.log
+    log_path = "debug_optimization.log"
+    file_handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    debug_logger.addHandler(file_handler)
+
+def log_debug(message: str, *args):
+    """Log un message dans le fichier de débogage et dans la console si nécessaire."""
+    try:
+        debug_logger.info(message, *args)
+        # logger.info(message, *args) # Décommenter pour aussi voir dans la console standard
+    except Exception:
+        pass  # Ne jamais faire planter l'appli pour un log
+
 
 
 class EvaluationResult(NamedTuple):
@@ -82,6 +105,12 @@ def optimize_savings_plan(
         "=== DÉBUT OPTIMISATION === Objectif: %.2f € en fin de vie",
         payload.target_final_capital
     )
+    log_debug("=== NOUVELLE DEMANDE OPTIMISATION ===")
+    log_debug("Cible: %.2f", payload.target_final_capital)
+    if payload.adults:
+        adult = payload.adults[0]
+        log_debug("Adulte 1 - Âge: %s, Retraite: %s, Espérance: %s", 
+                  adult.current_age, adult.retirement_age, adult.life_expectancy)
     
     # Mettre à jour la progression si task_id fourni (la tâche est déjà créée dans l'endpoint)
     if task_id:
@@ -654,8 +683,14 @@ def optimize_savings_plan(
                 final_scale = final_choice.scale
                 final_choice = evaluate(final_scale, mc_iterations_override=max_iterations_mc)
 
-        # Le capital minimum à la retraite est le capital médian atteint avec l'épargne optimale
-        minimum_capital_at_retirement = final_choice.accumulation.median_final_capital
+        # Recherche du capital minimum à la retraite par dichotomie
+        # On cherche le capital initial qui fait que la simulation de retraite finit à ~0€
+        minimum_capital_at_retirement = find_minimum_retirement_capital(
+            payload=payload,
+            real_accounts=real_accounts,
+            capital_at_retirement_real=capital_at_retirement_real,
+            capital_at_end_real=capital_at_end_real,
+        )
 
         logger.info(
             "✓ Étape 2 terminée - Facteur optimal: %.4f | Épargne minimum: %.2f €/mois | Capital final: %.2f €",
@@ -704,13 +739,20 @@ def optimize_savings_plan(
             retirement=retirement_real,
             sufficient=True,  # On considère que c'est suffisant si on ne calcule pas le minimum
         )
-        minimum_capital_at_retirement = capital_at_retirement_real
+        # Recherche du capital minimum à la retraite par dichotomie
+        minimum_capital_at_retirement = find_minimum_retirement_capital(
+            payload=payload,
+            real_accounts=real_accounts,
+            capital_at_retirement_real=capital_at_retirement_real,
+            capital_at_end_real=capital_at_end_real,
+        )
         steps = []  # Pas d'étapes d'optimisation
         
         logger.info(
-            "✓ Étape 2 ignorée - Utilisation des versements réels uniquement | Épargne: %.2f €/mois | Capital final: %.2f €",
+            "✓ Étape 2 ignorée - Utilisation des versements réels uniquement | Épargne: %.2f €/mois | Capital final: %.2f € | Capital min retraite: %.2f €",
             final_choice.total_savings,
-            final_choice.effective_final_capital
+            final_choice.effective_final_capital,
+            minimum_capital_at_retirement
         )
 
     # Toujours retourner les courbes avec les versements réels (scale=1.0)
@@ -722,14 +764,88 @@ def optimize_savings_plan(
             task_id,
             current_step="finalisation",
             step_description="Préparation des résultats",
-            progress_percent=95.0,  # Presque terminé
-            message="Finalisation...",
+            progress_percent=90.0,
+            message="Génération des courbes pour le capital minimum...",
         )
     
     if not accumulation_real:
         logger.error("ERREUR : accumulation_real est None !")
     if not retirement_real:
         logger.error("ERREUR : retirement_real est None !")
+    
+    # Générer une vraie simulation pour la courbe "Capital minimum à la retraite"
+    # Cette simulation part du capital minimum trouvé par dichotomie
+    minimum_capital_accumulation = None
+    minimum_capital_retirement = None
+    
+    if not payload.capitalization_only and minimum_capital_at_retirement > 0:
+        logger.info("Génération des courbes finales pour le capital minimum: %.2f €", minimum_capital_at_retirement)
+        
+        # Pour la phase de capitalisation, on ajuste la courbe réelle proportionnellement
+        # pour qu'elle atteigne le capital minimum à la retraite
+        if accumulation_real and accumulation_real.median_final_capital > 0:
+            ratio = minimum_capital_at_retirement / accumulation_real.median_final_capital
+            
+            # Créer des percentiles mensuels ajustés
+            adjusted_monthly_percentiles = []
+            for point in accumulation_real.monthly_percentiles:
+                adjusted_point = MonteCarloPercentilePoint(
+                    month_index=point.month_index,
+                    age=point.age,
+                    percentile_min=point.percentile_min * ratio,
+                    percentile_10=point.percentile_10 * ratio,
+                    percentile_50=point.percentile_50 * ratio,
+                    percentile_90=point.percentile_90 * ratio,
+                    percentile_max=point.percentile_max * ratio,
+                    cumulative_contribution=point.cumulative_contribution * ratio,
+                )
+                adjusted_monthly_percentiles.append(adjusted_point)
+            
+            minimum_capital_accumulation = MonteCarloResult(
+                iterations=accumulation_real.iterations,
+                confidence_level=accumulation_real.confidence_level,
+                tolerance_ratio=accumulation_real.tolerance_ratio,
+                confidence_reached=accumulation_real.confidence_reached,
+                error_margin=accumulation_real.error_margin * ratio if accumulation_real.error_margin else None,
+                error_margin_ratio=accumulation_real.error_margin_ratio,
+                mean_final_capital=accumulation_real.mean_final_capital * ratio,
+                median_final_capital=minimum_capital_at_retirement,
+                percentile_10=accumulation_real.percentile_10 * ratio,
+                percentile_50=minimum_capital_at_retirement,
+                percentile_90=accumulation_real.percentile_90 * ratio,
+                percentile_min=accumulation_real.percentile_min * ratio,
+                percentile_max=accumulation_real.percentile_max * ratio,
+                standard_deviation=accumulation_real.standard_deviation * ratio,
+                monthly_percentiles=adjusted_monthly_percentiles,
+            )
+            
+            logger.info("Courbe de capitalisation ajustée (ratio: %.4f)", ratio)
+        
+        # Pour la phase de retraite, générer une vraie simulation avec le capital minimum
+        # Cette simulation devrait naturellement finir proche de 0€
+        minimum_accounts = build_retirement_accounts(real_accounts, minimum_capital_at_retirement)
+        
+        minimum_retirement_result = run_single_retirement_scenario(
+            payload=payload,
+            retirement_accounts=minimum_accounts,
+            initial_capital=minimum_capital_at_retirement,
+            scenario_name="minimum_final",
+            task_id=None,
+            iterations_override=200,  # Plus d'itérations pour la courbe finale
+        )
+        
+        logger.info(
+            "Simulation retraite avec capital minimum: %.2f € → %.2f €",
+            minimum_capital_at_retirement,
+            minimum_retirement_result.median_final_capital
+        )
+        
+        # Créer un RetirementScenarioResults avec les 3 scénarios identiques
+        minimum_capital_retirement = RetirementScenarioResults(
+            pessimistic=minimum_retirement_result,
+            median=minimum_retirement_result,
+            optimistic=minimum_retirement_result,
+        )
     
     logger.info(
         "=== FIN OPTIMISATION === Épargne recommandée: %.2f €/mois | Capital final projeté: %.2f €",
@@ -742,12 +858,14 @@ def optimize_savings_plan(
         complete_progress(task_id, message="Optimisation terminée avec succès")
     
     # Retourner le résultat de l'optimisation
-    return RecommendedSavingsResult(
+    result_to_return = RecommendedSavingsResult(
         scale=final_choice.scale,  # Facteur optimal trouvé par l'algorithme
         recommended_monthly_savings=max(0.0, final_choice.total_savings),  # Épargne minimum nécessaire
         minimum_capital_at_retirement=minimum_capital_at_retirement,
         monte_carlo_result=accumulation_real,  # Toujours les courbes avec versements réels
         retirement_results=retirement_real if not payload.capitalization_only else None,  # None si capitalisation uniquement
+        optimal_monte_carlo_result=minimum_capital_accumulation or final_choice.accumulation,  # Courbes pour capital minimum
+        optimal_retirement_results=minimum_capital_retirement if minimum_capital_retirement else (final_choice.retirement if not payload.capitalization_only else None),  # Courbes pour capital minimum
         steps=steps,
         residual_error=final_choice.error,
         residual_error_ratio=(
@@ -757,6 +875,17 @@ def optimize_savings_plan(
             / max(abs(final_choice.effective_final_capital), 1.0)
         ),
     )
+    
+    log_debug("=== FIN OPTIMISATION ===")
+    log_debug("Scale: %.4f", result_to_return.scale)
+    log_debug("Rec. Savings: %.2f", result_to_return.recommended_monthly_savings)
+    log_debug("Min Capital Ret: %.2f", result_to_return.minimum_capital_at_retirement)
+    log_debug("Has Optimal Ret: %s", result_to_return.optimal_retirement_results is not None)
+    if result_to_return.optimal_retirement_results:
+        final_med = result_to_return.optimal_retirement_results.median.median_final_capital
+        log_debug("Optimal Ret Median Final: %.2f", final_med)
+
+    return result_to_return
 
 
 def scale_savings_phases(phases: List[SavingsPhase], scale: float) -> List[SavingsPhase]:
@@ -879,6 +1008,8 @@ def run_retirement_scenarios(
         target_monthly_income=payload.target_monthly_income,
         state_pension_monthly_income=payload.state_pension_monthly_income,
         additional_income_streams=payload.additional_income_streams,
+        household_charges=getattr(payload, "household_charges", None),
+        child_charges=getattr(payload, "child_charges", None),
         confidence_level=confidence_level_ret,
         tolerance_ratio=tolerance_ratio_ret,
         max_iterations=max_iterations_ret,
@@ -1124,6 +1255,215 @@ def build_retirement_accounts(
             )
         )
     return retirement_accounts
+
+
+def run_single_retirement_scenario(
+    payload: SavingsOptimizationInput,
+    retirement_accounts: List[InvestmentAccount],
+    initial_capital: float,
+    scenario_name: str = "custom",
+    task_id: str | None = None,
+    iterations_override: int | None = None,
+) -> RetirementMonteCarloResult:
+    """
+    Exécute une simulation de retraite unique pour un capital donné.
+
+    Args:
+        payload: Paramètres d'optimisation
+        retirement_accounts: Comptes configurés pour la retraite
+        initial_capital: Capital initial pour la simulation
+        scenario_name: Nom du scénario (pour les logs)
+        task_id: ID de tâche pour la progression (optionnel)
+        iterations_override: Nombre d'itérations à utiliser (optionnel)
+
+    Returns:
+        Résultat de la simulation de retraite
+    """
+    # Récupération des paramètres depuis market_assumptions ou valeurs par défaut
+    market = payload.market_assumptions
+    confidence_level_ret = getattr(market, "confidence_level", None) or payload.confidence_level
+    tolerance_ratio_ret = getattr(market, "tolerance_ratio", None) or payload.tolerance_ratio
+    max_iterations_ret = iterations_override or getattr(market, "max_iterations", None) or max(payload.max_iterations, 100)
+    batch_size_ret = getattr(market, "batch_size", None) or payload.batch_size
+    
+    # Paramètres pour la simulation de retraite
+    base_kwargs = dict(
+        adults=payload.adults,
+        market_assumptions=payload.market_assumptions,
+        spending_profile=payload.spending_profile,
+        target_monthly_income=payload.target_monthly_income,
+        state_pension_monthly_income=payload.state_pension_monthly_income,
+        additional_income_streams=payload.additional_income_streams,
+        household_charges=getattr(payload, "household_charges", None),
+        child_charges=getattr(payload, "child_charges", None),
+        confidence_level=confidence_level_ret,
+        tolerance_ratio=tolerance_ratio_ret,
+        max_iterations=max_iterations_ret,
+        batch_size=batch_size_ret,
+    )
+    
+    # Exécuter la simulation
+    result = simulate_retirement_monte_carlo(
+        RetirementMonteCarloInput(investment_accounts=retirement_accounts, **base_kwargs),
+        task_id=task_id,
+        verbose=False,
+    )
+    
+    return result
+
+
+def find_minimum_retirement_capital(
+    payload: SavingsOptimizationInput,
+    real_accounts: List[InvestmentAccount],
+    capital_at_retirement_real: float,
+    capital_at_end_real: float,
+    tolerance: float = 1000.0,  # Tolérance de 1000€
+    max_iterations: int = 20,
+) -> float:
+    """
+    Trouve le capital minimum à la retraite par recherche dichotomique.
+    
+    Le capital minimum est le capital initial qui fait que la simulation
+    de retraite finit à ~0€ (dans la tolérance).
+
+    Args:
+        payload: Paramètres d'optimisation
+        real_accounts: Comptes d'investissement réels
+        capital_at_retirement_real: Capital réel au début de la retraite
+        capital_at_end_real: Capital réel à la fin de vie
+        tolerance: Tolérance pour le capital final (défaut: 1000€)
+        max_iterations: Nombre maximum d'itérations (défaut: 20)
+
+    Returns:
+        Capital minimum à la retraite
+    """
+    logger.info("=== Recherche du capital minimum à la retraite ===")
+    log_debug("=== DEBUT RECHERCHE CAPITAL MINIMUM ===")
+    log_debug("Capital réel: %.2f, Final réel: %.2f", capital_at_retirement_real, capital_at_end_real)
+    
+    # Déterminer si le capital réel est suffisant ou insuffisant
+    # Si capital_at_end_real > tolerance : capital réel est PLUS que suffisant, chercher le minimum (inférieur)
+    # Si capital_at_end_real <= tolerance : capital réel est INSUFFISANT ou juste suffisant
+    #   - Si 0 <= capital_at_end_real <= tolerance : juste suffisant, le capital réel EST le minimum
+    #   - Si capital_at_end_real < 0 ou s'épuise prématurément : insuffisant, chercher le minimum (supérieur)
+    
+    # Pour détecter si le capital s'épuise prématurément, on doit simuler et vérifier
+    # Mais ici on utilise une heuristique : si le capital final est très proche de 0 ET
+    # que les besoins totaux sont élevés, le capital s'est probablement épuisé.
+    
+    # Calcul des besoins mensuels approximatifs
+    primary_adult = payload.adults[0] if payload.adults else None
+    retirement_age = primary_adult.retirement_age if primary_adult else 65
+    life_expectancy = primary_adult.life_expectancy if primary_adult else 85
+    retirement_months = int((life_expectancy - retirement_age) * 12) if life_expectancy and retirement_age else 240
+    
+    target_monthly = payload.target_monthly_income or 0
+    pension_monthly = payload.state_pension_monthly_income or 0
+    need_monthly = max(0, target_monthly - pension_monthly)
+    total_needs_estimate = need_monthly * retirement_months
+    
+    log_debug("Besoins mensuels estimés: %.2f, Durée retraite: %d mois, Total besoins: %.2f", 
+              need_monthly, retirement_months, total_needs_estimate)
+    
+    # Si le capital final est positif et > tolérance, le capital réel est plus que suffisant
+    # On cherche le minimum qui sera INFÉRIEUR au capital réel
+    if capital_at_end_real > tolerance:
+        logger.info("Capital final positif (%.2f€), recherche du minimum (inférieur au capital réel)", capital_at_end_real)
+        # Estimation initiale basée sur la consommation nette
+        consumption_net = capital_at_retirement_real - capital_at_end_real
+        low = max(0.0, consumption_net * 0.5)
+        high = capital_at_retirement_real
+    else:
+        # Le capital final est <= tolerance (proche de 0 ou négatif)
+        # Le capital réel pourrait être insuffisant (s'épuise prématurément) ou juste suffisant
+        
+        # Heuristique : si le capital réel est significativement inférieur aux besoins totaux estimés
+        # et que le capital final est ~0, le capital s'est probablement épuisé prématurément
+        capital_covers_needs_ratio = capital_at_retirement_real / total_needs_estimate if total_needs_estimate > 0 else float('inf')
+        
+        if capital_covers_needs_ratio > 1.5:
+            # Le capital couvre largement les besoins, probablement juste suffisant
+            logger.info("Capital final proche de 0 (%.2f€) mais capital réel couvre %.1fx les besoins. Capital réel est le minimum.",
+                       capital_at_end_real, capital_covers_needs_ratio)
+            log_debug("Capital final proche de 0 mais suffisant. Ratio couverture: %.2f", capital_covers_needs_ratio)
+            return capital_at_retirement_real
+        else:
+            # Le capital ne couvre pas largement les besoins, probablement insuffisant
+            # On cherche le minimum qui sera SUPÉRIEUR au capital réel
+            logger.info("Capital final proche de 0 (%.2f€) et ratio couverture faible (%.1fx). Recherche du minimum (supérieur au capital réel)",
+                       capital_at_end_real, capital_covers_needs_ratio)
+            log_debug("Capital probablement insuffisant. Ratio couverture: %.2f. Recherche minimum supérieur.", capital_covers_needs_ratio)
+            
+            # Estimation : le minimum est environ (besoins totaux) / facteur_rendement
+            # Avec un rendement moyen de 3-4% pendant la retraite, facteur ~= 0.7-0.8
+            estimated_min = total_needs_estimate * 0.75
+            low = capital_at_retirement_real
+            high = max(capital_at_retirement_real * 2, estimated_min * 1.5)
+    
+    log_debug("Bornes initiales: low=%.2f, high=%.2f", low, high)
+    
+    def evaluate_retirement_capital(test_capital: float) -> float:
+        """Simule la retraite avec un capital donné et retourne le capital final."""
+        if test_capital <= 0:
+            return -float('inf')
+        
+        # Construire les comptes de retraite avec le capital test
+        test_accounts = build_retirement_accounts(real_accounts, test_capital)
+        
+        # Simulation un peu plus précise (100 itérations)
+        result = run_single_retirement_scenario(
+            payload=payload,
+            retirement_accounts=test_accounts,
+            initial_capital=test_capital,
+            scenario_name=f"dichotomy_{test_capital:.0f}",
+            task_id=None,
+            iterations_override=100,
+        )
+        
+        return result.median_final_capital
+    
+    # Recherche dichotomique
+    best_capital = high
+    best_final = capital_at_end_real
+    
+    for iteration in range(max_iterations):
+        mid = (low + high) / 2
+        final_capital = evaluate_retirement_capital(mid)
+        
+        log_debug("Iter %d: capital=%.2f -> final=%.2f (low=%.2f, high=%.2f)", 
+                 iteration, mid, final_capital, low, high)
+        
+        # Si le capital final est proche de 0, on a trouvé une bonne approximation
+        if abs(final_capital) <= tolerance:
+            log_debug("Trouvé! Différence dans la tolérance.")
+            return mid
+        
+        # Logique standard de dichotomie pour une fonction croissante f(capital) = final_capital
+        # On veut final_capital = 0
+        if final_capital > tolerance:
+            # Capital trop élevé -> on réduit la borne haute
+            high = mid
+            # On garde en mémoire le meilleur résultat positif (au cas où on ne trouve pas 0)
+            # Ou le meilleur résultat absolu ?
+            # On préfère finir légèrement au dessus de 0 que dessous
+            if 0 < final_capital < best_final:
+                best_capital = mid
+                best_final = final_capital
+        else:
+            # Capital trop faible (final < 0) -> on augmente la borne basse
+            low = mid
+        
+        # Vérifier la convergence
+        if high - low < tolerance / 10: # Convergence sur le capital d'entrée
+            log_debug("Convergence des bornes atteinte.")
+            break
+    
+    # Si on n'a pas trouvé exactement 0, on retourne la dernière meilleure approximation "sûre" (high)
+    # ou mid si on veut être au plus proche.
+    # Prenons 'high' pour garantir qu'on est >= 0 (si possible)
+    final_res = high
+    log_debug("Fin recherche. Retourne %.2f", final_res)
+    return final_res
 
 
 def compute_account_weights(accounts: List[InvestmentAccount]) -> List[float]:

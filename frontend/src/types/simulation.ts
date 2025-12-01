@@ -179,6 +179,8 @@ export interface RetirementMonteCarloResult {
   confidenceLevel: number;
   toleranceRatio: number;
   confidenceReached: boolean;
+  errorMargin?: number; // Marge d'erreur absolue (en euros)
+  errorMarginRatio?: number; // Ratio de marge d'erreur (en pourcentage de la moyenne)
   meanFinalCapital: number;
   medianFinalCapital: number;
   percentile10: number;

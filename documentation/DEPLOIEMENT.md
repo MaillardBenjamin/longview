@@ -412,3 +412,5 @@ Pour une charge élevée, considérer :
 3. **Cache Redis** : Pour mettre en cache les résultats de simulation
 4. **Queue de tâches** : Celery pour les calculs longs
 
+
+

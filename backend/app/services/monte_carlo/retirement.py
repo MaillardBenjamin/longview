@@ -16,6 +16,8 @@ from typing import Dict, List
 
 from app.schemas.projections import (
     AdditionalIncome,
+    ChildCharge,
+    HouseholdCharge,
     InvestmentAccount,
     RetirementMonteCarloInput,
     RetirementMonteCarloPoint,
@@ -122,6 +124,27 @@ def simulate_retirement_monte_carlo(
             total_additional = sum(inc.monthly_amount for inc in payload.additional_income_streams)
             logger.info("  Revenus complémentaires mensuels: %.2f € (%d source(s))", 
                        total_additional, len(payload.additional_income_streams))
+        
+        # Charges
+        if payload.household_charges or payload.child_charges:
+            logger.info("--- Charges actives pendant la retraite ---")
+            if payload.household_charges:
+                for idx, charge in enumerate(payload.household_charges):
+                    until_info = f"jusqu'à {charge.until_age:.1f} ans" if charge.until_age else "indéfiniment"
+                    logger.info("  Charge foyer %d: %s - %.2f €/mois (%s)",
+                               idx + 1, charge.label, charge.monthly_amount, until_info)
+            if payload.child_charges:
+                for idx, charge in enumerate(payload.child_charges):
+                    until_info = f"jusqu'à {charge.until_age:.1f} ans" if charge.until_age else "indéfiniment"
+                    logger.info("  Charge enfant %d: %s - %.2f €/mois (%s)",
+                               idx + 1, charge.child_name, charge.monthly_amount, until_info)
+            # Calcul du total des charges au début de la retraite
+            initial_charges = compute_charges_amount(
+                payload.household_charges,
+                payload.child_charges,
+                retirement_age,
+            )
+            logger.info("  Total charges au début retraite (%.1f ans): %.2f €/mois", retirement_age, initial_charges)
         
         # Profil de dépenses
         if payload.spending_profile:
@@ -460,10 +483,18 @@ def _simulate_retirement_single_run(
         additional_income = compute_additional_income_amount(
             payload.additional_income_streams or [], age
         )
+        
+        # Calcul des charges actives à cet âge (prêts, enfants, etc.)
+        charges = compute_charges_amount(
+            payload.household_charges,
+            payload.child_charges,
+            age,
+        )
 
         # Calcul du retrait NET nécessaire pour compléter les revenus
+        # On soustrait les charges car elles réduisent le revenu disponible
         required_net_withdrawal = max(
-            0.0, target_income - pension_income - additional_income
+            0.0, target_income + charges - pension_income - additional_income
         )
 
         # Calcul itératif du retrait brut nécessaire pour obtenir le montant net souhaité
@@ -1032,5 +1063,43 @@ def compute_additional_income_amount(
         start_age = income.start_age if income.start_age is not None else age
         if age >= start_age:
             total += income.monthly_amount
+    return total
+
+
+def compute_charges_amount(
+    household_charges: List[HouseholdCharge] | None,
+    child_charges: List[ChildCharge] | None,
+    age: float,
+) -> float:
+    """
+    Calcule le montant total des charges actives à un âge donné.
+
+    Prend en compte les charges du foyer et les charges liées aux enfants
+    qui sont encore actives à l'âge donné (selon until_age).
+
+    Args:
+        household_charges: Liste des charges du foyer
+        child_charges: Liste des charges liées aux enfants
+        age: Âge pour lequel calculer les charges
+
+    Returns:
+        Montant mensuel total des charges actives
+    """
+    total = 0.0
+    
+    # Charges du foyer
+    if household_charges:
+        for charge in household_charges:
+            # La charge est active si until_age n'est pas défini ou si l'âge est inférieur à until_age
+            if charge.until_age is None or age < charge.until_age:
+                total += charge.monthly_amount
+    
+    # Charges liées aux enfants
+    if child_charges:
+        for charge in child_charges:
+            # La charge est active si until_age n'est pas défini ou si l'âge est inférieur à until_age
+            if charge.until_age is None or age < charge.until_age:
+                total += charge.monthly_amount
+    
     return total
 

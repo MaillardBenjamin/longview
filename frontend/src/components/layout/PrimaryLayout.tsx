@@ -173,8 +173,11 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
             <IconButton
               onClick={toggleMode}
               sx={{
-                color: theme.palette.text.primary,
+                color: mode === "dark" ? "#f8fafc" : "#0f172a",
                 marginRight: user ? "1rem" : "0.5rem",
+                "&:hover": {
+                  backgroundColor: mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+                },
               }}
               aria-label="Basculer le mode sombre/clair"
             >

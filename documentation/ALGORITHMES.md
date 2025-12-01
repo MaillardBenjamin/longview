@@ -278,3 +278,5 @@ Les temps peuvent varier selon :
 - Durée de la simulation (âge actuel → espérance de vie)
 - Nombre d'itérations Monte Carlo configuré
 
+
+

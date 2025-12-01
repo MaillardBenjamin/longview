@@ -16,6 +16,7 @@ import type {
   RetirementScenarioResults,
   Simulation,
   SimulationInput,
+  TaxBreakdownByAccountType,
 } from "@/types/simulation";
 
 /**
@@ -192,6 +193,30 @@ function mapAdditionalIncomeStreamsToApi(streams: SimulationInput["additionalInc
 }
 
 /**
+ * Convertit les charges du foyer vers le format API.
+ */
+function mapHouseholdChargesToApi(charges: SimulationInput["householdCharges"]) {
+  return (charges ?? []).map((charge) => ({
+    id: charge.id,
+    label: charge.label,
+    category: charge.category,
+    monthly_amount: charge.monthlyAmount,
+    until_age: charge.untilAge,
+  }));
+}
+
+/**
+ * Convertit les charges liées aux enfants vers le format API.
+ */
+function mapChildChargesToApi(charges: SimulationInput["childCharges"]) {
+  return (charges ?? []).map((charge) => ({
+    child_name: charge.childName,
+    monthly_amount: charge.monthlyAmount,
+    until_age: charge.untilAge,
+  }));
+}
+
+/**
  * Convertit les hypothèses de marché vers le format API.
  */
 function mapMarketAssumptionsToApi(market: SimulationInput["marketAssumptions"]) {
@@ -260,7 +285,7 @@ function buildMonteCarloResultFromApi(data: any): MonteCarloResult {
  * Construit un résultat de simulation de retraite depuis la réponse API.
  */
 function buildRetirementMonteCarloResultFromApi(data: any): RetirementMonteCarloResult {
-  return {
+  const result: RetirementMonteCarloResult = {
     iterations: data.iterations ?? 0,
     confidenceLevel: data.confidenceLevel ?? data.confidence_level ?? 0.9,
     toleranceRatio: data.toleranceRatio ?? data.tolerance_ratio ?? 0.01,
@@ -297,43 +322,44 @@ function buildRetirementMonteCarloResultFromApi(data: any): RetirementMonteCarlo
       totalSocialContributions: point.totalSocialContributions ?? point.total_social_contributions ?? 0,
       totalTaxes: point.totalTaxes ?? point.total_taxes ?? 0,
     })),
-      totalTaxesByAccountType: (() => {
-        const taxes = data.totalTaxesByAccountType ?? data.total_taxes_by_account_type ?? {};
-        console.log("Taxes reçues du backend:", taxes);
-        if (Object.keys(taxes).length === 0) {
-          console.warn("Aucune taxe reçue du backend!");
+    totalTaxesByAccountType: (() => {
+      const taxes = data.totalTaxesByAccountType ?? data.total_taxes_by_account_type ?? {};
+      console.log("Taxes reçues du backend:", taxes);
+      if (Object.keys(taxes).length === 0) {
+        console.warn("Aucune taxe reçue du backend!");
+      }
+      // Convertir les valeurs en format frontend si nécessaire
+      const converted: Record<string, TaxBreakdownByAccountType> = {};
+      for (const [key, value] of Object.entries(taxes)) {
+        if (value && typeof value === 'object') {
+          const taxValue = value as any;
+          converted[key] = {
+            accountType: taxValue.accountType ?? taxValue.account_type ?? key,
+            grossWithdrawal: taxValue.grossWithdrawal ?? taxValue.gross_withdrawal ?? 0,
+            capitalGain: taxValue.capitalGain ?? taxValue.capital_gain ?? 0,
+            incomeTax: taxValue.incomeTax ?? taxValue.income_tax ?? 0,
+            socialContributions: taxValue.socialContributions ?? taxValue.social_contributions ?? 0,
+            netWithdrawal: taxValue.netWithdrawal ?? taxValue.net_withdrawal ?? 0,
+          };
         }
-        // Convertir les valeurs en format frontend si nécessaire
-        const converted: Record<string, any> = {};
-        for (const [key, value] of Object.entries(taxes)) {
-          if (value && typeof value === 'object') {
-            converted[key] = {
-              accountType: value.accountType ?? value.account_type ?? key,
-              grossWithdrawal: value.grossWithdrawal ?? value.gross_withdrawal ?? 0,
-              capitalGain: value.capitalGain ?? value.capital_gain ?? 0,
-              incomeTax: value.incomeTax ?? value.income_tax ?? 0,
-              socialContributions: value.socialContributions ?? value.social_contributions ?? 0,
-              netWithdrawal: value.netWithdrawal ?? value.net_withdrawal ?? 0,
-            };
-          }
-        }
-        console.log("Taxes converties:", converted);
-        return converted;
-      })(),
-      cumulativeTotalIncomeTax: data.cumulativeTotalIncomeTax ?? data.cumulative_total_income_tax ?? 0,
-      cumulativeTotalSocialContributions: data.cumulativeTotalSocialContributions ?? data.cumulative_total_social_contributions ?? 0,
-      cumulativeTotalTaxes: data.cumulativeTotalTaxes ?? data.cumulative_total_taxes ?? 0,
-    };
-    
-    console.log("Résultat final buildRetirementMonteCarloResultFromApi:", {
-      hasTaxes: Object.keys(result.totalTaxesByAccountType ?? {}).length > 0,
-      totalIncomeTax: result.cumulativeTotalIncomeTax,
-      totalSocialContributions: result.cumulativeTotalSocialContributions,
-      totalTaxes: result.cumulativeTotalTaxes,
-    });
-    
-    return result;
-  }
+      }
+      console.log("Taxes converties:", converted);
+      return converted;
+    })(),
+    cumulativeTotalIncomeTax: data.cumulativeTotalIncomeTax ?? data.cumulative_total_income_tax ?? 0,
+    cumulativeTotalSocialContributions: data.cumulativeTotalSocialContributions ?? data.cumulative_total_social_contributions ?? 0,
+    cumulativeTotalTaxes: data.cumulativeTotalTaxes ?? data.cumulative_total_taxes ?? 0,
+  };
+  
+  console.log("Résultat final buildRetirementMonteCarloResultFromApi:", {
+    hasTaxes: Object.keys(result.totalTaxesByAccountType ?? {}).length > 0,
+    totalIncomeTax: result.cumulativeTotalIncomeTax,
+    totalSocialContributions: result.cumulativeTotalSocialContributions,
+    totalTaxes: result.cumulativeTotalTaxes,
+  });
+  
+  return result;
+}
 
 /**
  * Construit les résultats des scénarios de retraite depuis la réponse API.
@@ -587,6 +613,8 @@ export async function simulateRetirementMonteCarlo(
     target_monthly_income: simulation.targetMonthlyIncome ?? 0,
     state_pension_monthly_income: simulation.statePensionMonthlyIncome ?? 0,
     additional_income_streams: mapAdditionalIncomeStreamsToApi(simulation.additionalIncomeStreams),
+    household_charges: mapHouseholdChargesToApi(simulation.householdCharges),
+    child_charges: mapChildChargesToApi(simulation.childCharges),
     tax_parameters: simulation.taxParameters ? {
       tmi_savings_phase: simulation.taxParameters.tmiSavingsPhase,
       tmi_retirement_phase: simulation.taxParameters.tmiRetirementPhase,
@@ -638,6 +666,8 @@ export async function optimizeSavingsPlan(
   minimumCapitalAtRetirement: number;
   monteCarloResult: MonteCarloResult;
   retirementResults: RetirementScenarioResults | null;
+  optimalMonteCarloResult?: MonteCarloResult | null;
+  optimalRetirementResults?: RetirementScenarioResults | null;
   steps: OptimizationStep[];
   residualError: number;
   residualErrorRatio: number;
@@ -660,6 +690,8 @@ export async function optimizeSavingsPlan(
     target_monthly_income: simulation.targetMonthlyIncome ?? 0,
     state_pension_monthly_income: simulation.statePensionMonthlyIncome ?? 0,
     additional_income_streams: mapAdditionalIncomeStreamsToApi(simulation.additionalIncomeStreams),
+    household_charges: mapHouseholdChargesToApi(simulation.householdCharges),
+    child_charges: mapChildChargesToApi(simulation.childCharges),
     tax_parameters: simulation.taxParameters ? {
       tmi_savings_phase: simulation.taxParameters.tmiSavingsPhase,
       tmi_retirement_phase: simulation.taxParameters.tmiRetirementPhase,
@@ -793,6 +825,8 @@ export async function optimizeSavingsPlan(
   // Gérer les deux formats : camelCase et snake_case
   const monteCarloData = data.monteCarloResult || data.monte_carlo_result;
   const retirementData = data.retirementResults || data.retirement_results;
+  const optimalMonteCarloData = data.optimalMonteCarloResult || data.optimal_monte_carlo_result;
+  const optimalRetirementData = data.optimalRetirementResults || data.optimal_retirement_results;
   const recommendedSavings = data.recommendedMonthlySavings ?? data.recommended_monthly_savings ?? 0;
   const minCapital = data.minimumCapitalAtRetirement ?? data.minimum_capital_at_retirement ?? 0;
   const residualErr = data.residualError ?? data.residual_error ?? 0;
@@ -802,6 +836,8 @@ export async function optimizeSavingsPlan(
   console.log("Réponse API d'optimisation reçue:", {
     hasMonteCarloResult: !!monteCarloData,
     hasRetirementResults: !!retirementData,
+    hasOptimalMonteCarloResult: !!optimalMonteCarloData,
+    hasOptimalRetirementResults: !!optimalRetirementData,
     scale: data.scale,
     recommendedMonthlySavings: recommendedSavings,
     keysInData: Object.keys(data),
@@ -825,6 +861,8 @@ export async function optimizeSavingsPlan(
     minimumCapitalAtRetirement: minCapital,
     monteCarloResult: buildMonteCarloResultFromApi(monteCarloData),
     retirementResults: retirementData ? buildRetirementScenarioResultsFromApi(retirementData) : null,
+    optimalMonteCarloResult: optimalMonteCarloData ? buildMonteCarloResultFromApi(optimalMonteCarloData) : null,
+    optimalRetirementResults: optimalRetirementData ? buildRetirementScenarioResultsFromApi(optimalRetirementData) : null,
     steps: (data.steps ?? []).map((step: any) => ({
       iteration: step.iteration ?? 0,
       scale: step.scale ?? 0,

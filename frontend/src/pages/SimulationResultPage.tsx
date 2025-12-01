@@ -36,6 +36,8 @@ interface LocationState {
   draft?: SimulationInput;
   monteCarloResult?: MonteCarloResult;
   retirementMonteCarloResult?: RetirementScenarioResults;
+  optimalMonteCarloResult?: MonteCarloResult;
+  optimalRetirementResults?: RetirementScenarioResults;
   recommendedSavings?: number;
   minimumCapitalAtRetirement?: number;
   optimizationSteps?: OptimizationStep[];
@@ -202,6 +204,8 @@ const marketAssumptions =
 
   const monteCarloFromState = locationState?.monteCarloResult ?? null;
   const retirementMonteCarloFromState = locationState?.retirementMonteCarloResult ?? null;
+  const optimalMonteCarloFromState = locationState?.optimalMonteCarloResult ?? null;
+  const optimalRetirementFromState = locationState?.optimalRetirementResults ?? null;
 
   // Debug: vérifier les données reçues
   useEffect(() => {
@@ -413,7 +417,10 @@ const marketAssumptions =
       draft: draft ?? undefined,
       monteCarloResult: monteCarloResult ?? undefined,
       retirementMonteCarloResult: retirementMonteCarloResult ?? undefined,
+      optimalMonteCarloResult: optimalMonteCarloFromState ?? undefined,
+      optimalRetirementResults: optimalRetirementFromState ?? undefined,
       recommendedSavings: recommendedSavings ?? undefined,
+      minimumCapitalAtRetirement: minimumCapitalAtRetirement ?? undefined,
       optimizationSteps: optimizationSteps.length > 0 ? optimizationSteps : undefined,
       optimizationScale: optimizationScale ?? undefined,
       optimizationResidualError: optimizationResidualError ?? undefined,
@@ -424,7 +431,7 @@ const marketAssumptions =
     } catch (error) {
       console.warn("Impossible de sauvegarder la simulation dans le stockage de session.", error);
     }
-  }, [simulation, result, draft, monteCarloResult, retirementMonteCarloResult]);
+  }, [simulation, result, draft, monteCarloResult, retirementMonteCarloResult, optimalMonteCarloFromState, optimalRetirementFromState, recommendedSavings, minimumCapitalAtRetirement, optimizationSteps, optimizationScale, optimizationResidualError, optimizationResidualErrorRatio]);
 
   const primaryAdult = adults[0];
   const primaryRetirementAge =
@@ -553,6 +560,37 @@ const marketAssumptions =
                         Capital minimum à la retraite : <strong>{formatCurrency(minimumCapitalAtRetirement)}</strong>
                       </Typography>
                     )}
+                    {/* Hypothèses de simulation */}
+                    <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${theme.palette.divider}` }}>
+                      <Typography variant="caption" sx={{ opacity: 0.7, fontSize: "0.75rem", fontWeight: 600, mb: 0.5, display: "block" }}>
+                        Hypothèses de simulation
+                      </Typography>
+                      <Typography variant="body2" sx={{ opacity: 0.85, fontSize: "0.8rem", lineHeight: 1.6 }}>
+                        {monteCarloResult?.iterations ? (
+                          <>
+                            {monteCarloResult.iterations.toLocaleString("fr-FR")} tirages Monte Carlo
+                            {monteCarloResult.confidenceLevel !== undefined && (
+                              <> · confiance {Math.round(monteCarloResult.confidenceLevel * 100)}%</>
+                            )}
+                            {monteCarloResult.toleranceRatio !== undefined && (
+                              <> · marge ±{Math.round(monteCarloResult.toleranceRatio * 100)}%</>
+                            )}
+                          </>
+                        ) : marketAssumptions ? (
+                          <>
+                            Confiance {Math.round((marketAssumptions.confidenceLevel ?? 0.9) * 100)}%
+                            {marketAssumptions.toleranceRatio !== undefined && (
+                              <> · marge ±{Math.round(marketAssumptions.toleranceRatio * 100)}%</>
+                            )}
+                            {marketAssumptions.maxIterations && (
+                              <> · max {marketAssumptions.maxIterations.toLocaleString("fr-FR")} itérations</>
+                            )}
+                          </>
+                        ) : (
+                          "Confiance 90% · marge ±1%"
+                        )}
+                      </Typography>
+                    </Box>
                   </Box>
                 </CardContent>
               </Card>
@@ -731,6 +769,11 @@ const marketAssumptions =
       <CombinedTrajectorySection
         accumulation={monteCarloResult}
         retirement={retirementMonteCarloResult}
+        optimalAccumulation={optimalMonteCarloFromState}
+        optimalRetirement={optimalRetirementFromState}
+        optimizationScale={optimizationScale}
+        recommendedSavings={recommendedSavings}
+        minimumCapitalAtRetirement={minimumCapitalAtRetirement}
       />
       <MonteCarloSection
         result={monteCarloResult}
@@ -1089,9 +1132,19 @@ function MonteCarloSection({
 function CombinedTrajectorySection({
   accumulation,
   retirement,
+  optimalAccumulation,
+  optimalRetirement,
+  optimizationScale,
+  recommendedSavings,
+  minimumCapitalAtRetirement,
 }: {
   accumulation: MonteCarloResult | null;
   retirement: RetirementScenarioResults | null;
+  optimalAccumulation?: MonteCarloResult | null;
+  optimalRetirement?: RetirementScenarioResults | null;
+  optimizationScale?: number;
+  recommendedSavings?: number; // eslint-disable-line @typescript-eslint/no-unused-vars -- Réservé pour usage futur
+  minimumCapitalAtRetirement?: number;
 }) {
   const theme = useTheme();
   const combinedPoints = useMemo(() => {
@@ -1161,6 +1214,114 @@ function CombinedTrajectorySection({
     return points;
   }, [accumulation, retirement]);
 
+  // Créer une série de points pour la courbe "Capital minimum à la retraite"
+  // Cette courbe utilise les simulations optimales du backend qui représentent
+  // la trajectoire partant du capital minimum à la retraite et se terminant à ~0€
+  const minimumSavingsPoints = useMemo(() => {
+    // On a besoin du capital minimum pour afficher cette courbe
+    if (minimumCapitalAtRetirement === undefined || minimumCapitalAtRetirement === null) {
+      return null;
+    }
+
+    const points: Array<{
+      age: number;
+      label: string;
+      value: number;
+    }> = [];
+
+    // Phase de capitalisation : utiliser les courbes optimales si disponibles
+    // Sinon, ajuster proportionnellement la courbe réelle
+    if (optimalAccumulation && optimalAccumulation.monthlyPercentiles?.length > 0) {
+      // Utiliser directement les courbes optimales générées par le backend
+      // Ces courbes sont spécifiquement ajustées pour atteindre le capital minimum
+      const optimalAccumulationPoints = optimalAccumulation.monthlyPercentiles;
+      
+      optimalAccumulationPoints.forEach((point) => {
+        points.push({
+          age: point.age,
+          label: `Âge ${point.age.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`,
+          value: point.percentile50,
+        });
+      });
+    } else if (accumulation && accumulation.monthlyPercentiles?.length > 0) {
+      // Fallback : ajuster proportionnellement la courbe réelle
+      const accumulationPoints = accumulation.monthlyPercentiles;
+      const lastPoint = accumulationPoints[accumulationPoints.length - 1];
+      const realEndCapital = lastPoint.percentile50;
+      const adjustmentRatio = realEndCapital > 0 
+        ? minimumCapitalAtRetirement / realEndCapital 
+        : 1.0;
+      
+      accumulationPoints.forEach((point, index) => {
+        const isLastPoint = index === accumulationPoints.length - 1;
+        const adjustedValue = isLastPoint 
+          ? minimumCapitalAtRetirement 
+          : point.percentile50 * adjustmentRatio;
+        
+        points.push({
+          age: point.age,
+          label: `Âge ${point.age.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`,
+          value: adjustedValue,
+        });
+      });
+    } else {
+      return null;
+    }
+
+    // Phase de retraite : utiliser les courbes optimales du backend si disponibles
+    // Ces courbes sont générées avec le capital minimum exact trouvé par dichotomie
+    if (optimalRetirement && optimalRetirement.median?.monthlyPercentiles?.length > 0) {
+      // Utiliser directement les courbes de retraite optimales
+      const optimalMedianSeries = optimalRetirement.median.monthlyPercentiles;
+      
+      optimalMedianSeries.forEach((point) => {
+        points.push({
+          age: point.age,
+          label: `Âge ${point.age.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`,
+          value: Math.max(0, point.percentile50),
+        });
+      });
+    } else if (retirement && retirement.median?.monthlyPercentiles?.length > 0) {
+      // Fallback : ajuster la courbe réelle proportionnellement ou linéairement
+      const medianSeries = retirement.median.monthlyPercentiles;
+      const realStartCapital = medianSeries[0]?.percentile50 ?? 1;
+      const realEndCapital = medianSeries[medianSeries.length - 1]?.percentile50 ?? 0;
+      
+      // Si la courbe réelle s'épuise prématurément (capital final proche de 0 alors qu'on attendait plus)
+      // ou si elle finit à 0, on ne peut pas utiliser sa "forme" car elle décroît trop vite.
+      // Dans ce cas, on utilise une décroissance linéaire théorique pour le capital minimum.
+      const realCurveDepleted = realEndCapital <= 100; // Considéré comme épuisé si <= 100€
+      
+      medianSeries.forEach((point, index) => {
+        let adjustedValue;
+        
+        if (realCurveDepleted) {
+          // Décroissance linéaire théorique de minCapital à 0 sur toute la durée
+          // Car la courbe réelle n'est pas une bonne référence (elle s'épuise trop vite)
+          const progress = index / Math.max(1, medianSeries.length - 1);
+          adjustedValue = minimumCapitalAtRetirement * (1 - progress);
+        } else {
+          // La courbe réelle est valide (ne s'épuise pas), on peut utiliser sa forme
+          // Calculer la progression relative dans la retraite
+          const realProgress = realStartCapital > 0 
+            ? (realStartCapital - point.percentile50) / realStartCapital 
+            : index / Math.max(1, medianSeries.length - 1);
+          
+          // Appliquer la même progression relative au capital minimum
+          adjustedValue = minimumCapitalAtRetirement * (1 - realProgress);
+        }
+        
+        points.push({
+          age: point.age,
+          label: `Âge ${point.age.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`,
+          value: Math.max(0, adjustedValue),
+        });
+      });
+    }
+
+    return points;
+  }, [accumulation, retirement, optimalAccumulation, optimalRetirement, minimumCapitalAtRetirement]);
+
   const hasData = combinedPoints.length > 0;
 
   // Déterminer l'index de transition entre capitalisation et retraite
@@ -1183,17 +1344,29 @@ function CombinedTrajectorySection({
 
           const phase = index < retirementStartIndex ? "Phase de capitalisation" : "Phase de retraite";
           const phaseColor = theme.palette.mode === "dark" ? "#94a3b8" : "#64748b";
-          return [
+          const lines = [
             `<strong>${point.label}</strong>`,
             `<em style="color: ${phaseColor};">${phase}</em>`,
             `Scénario pessimiste: ${formatCurrency(point.pessimistic, 0)}`,
             `Scénario médian: ${formatCurrency(point.median, 0)}`,
             `Scénario optimiste: ${formatCurrency(point.optimistic, 0)}`,
-          ].join("<br/>");
+          ];
+          
+          // Ajouter la courbe "Capital minimum à la retraite" si disponible
+          if (minimumSavingsPoints && minimumSavingsPoints[index]) {
+            const minValue = minimumSavingsPoints[index].value;
+            if (minValue !== null && minValue !== undefined) {
+              lines.push(`Capital minimum à la retraite: ${formatCurrency(minValue, 0)}`);
+            }
+          }
+          
+          return lines.join("<br/>");
         },
       },
       legend: {
-        data: ["Pessimiste", "Médian", "Optimiste"],
+        data: minimumSavingsPoints
+          ? ["Pessimiste", "Médian", "Optimiste", "Capital minimum à la retraite"]
+          : ["Pessimiste", "Médian", "Optimiste"],
         bottom: 0,
       },
       grid: {
@@ -1316,9 +1489,29 @@ function CombinedTrajectorySection({
           },
           data: combinedPoints.map((point) => point.optimistic),
         },
+        ...(minimumSavingsPoints
+          ? [
+              {
+                name: "Capital minimum à la retraite",
+                type: "line" as const,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: {
+                  width: 3,
+                  type: "dashed" as const,
+                  color: "#f59e0b",
+                },
+                data: combinedPoints.map((_point, index) => {
+                  const minPoint = minimumSavingsPoints[index];
+                  return minPoint ? minPoint.value : null;
+                }),
+                z: 10, // Afficher au-dessus des autres courbes
+              },
+            ]
+          : []),
       ],
     };
-  }, [combinedPoints, hasData, retirementStartIndex]);
+  }, [combinedPoints, hasData, retirementStartIndex, minimumSavingsPoints]);
 
   if (!hasData) {
     return null;

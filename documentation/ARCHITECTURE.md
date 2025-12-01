@@ -388,3 +388,5 @@ Les tests sont dans `frontend/src/__tests__/` (à créer) :
 - Tests des hooks
 - Tests d'intégration des services
 
+
+
