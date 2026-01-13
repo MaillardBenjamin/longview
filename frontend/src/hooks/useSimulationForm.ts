@@ -65,21 +65,39 @@ const createHouseholdCharge = (overrides: Partial<HouseholdCharge> = {}): Househ
   ...overrides,
 });
 
-// État initial par défaut
+const createInvestmentAccount = (overrides: Partial<InvestmentAccount> = {}): InvestmentAccount => ({
+  id: generateId(),
+  type: "pea",
+  label: "Nouveau compte",
+  currentAmount: 0,
+  monthlyContribution: 500,
+  ownerName: undefined,
+  allocationActions: 70,
+  allocationObligations: 20,
+  allocationLivrets: 5,
+  allocationCrypto: 0,
+  allocationOther: 5,
+  openingDateAge: undefined,
+  initialCostBasis: undefined,
+  ...overrides,
+});
+
+// État initial par défaut - Revenus représentatifs de la classe moyenne française
+// Classe moyenne couple : 2 800€ à 3 200€/mois net par personne (seuil supérieur ~5 820€/mois pour le couple)
 const defaultAdults = [
   createAdult({
     firstName: "Claire",
     currentAge: 40,
     retirementAge: 63,
     lifeExpectancy: 92,
-    monthlyNetIncome: 4200,
+    monthlyNetIncome: 3000, // Ajusté pour classe moyenne (était 4200)
   }),
   createAdult({
     firstName: "Marc",
     currentAge: 42,
     retirementAge: 65,
     lifeExpectancy: 90,
-    monthlyNetIncome: 3800,
+    monthlyNetIncome: 2800, // Ajusté pour classe moyenne (était 3800)
   }),
 ];
 
@@ -98,34 +116,97 @@ const initialFormState: SimulationInput = {
     { label: "Retraite sereine", fromAge: 81, toAge: 100, spendingRatio: 0.7 },
   ],
   savingsPhases: [
-    createSavingsPhase({ label: "Aujourd'hui", fromAge: 40, toAge: 55, monthlyContribution: 900 }),
+    // Épargne représentative de la classe moyenne : ~10-15% des revenus (500€/mois pour un couple à 5 800€)
+    createSavingsPhase({ label: "Aujourd'hui", fromAge: 40, toAge: 55, monthlyContribution: 500 }), // Ajusté (était 900)
     createSavingsPhase({
       label: "Dernières années actives",
       fromAge: 55,
       toAge: 63,
-      monthlyContribution: 1200,
+      monthlyContribution: 700, // Ajusté (était 1200)
     }),
   ],
   householdCharges: [
     createHouseholdCharge({
       label: "Prêt immobilier principal",
       category: "housing_loan",
-      monthlyAmount: 850,
+      monthlyAmount: 750, // Ajusté pour classe moyenne (était 850)
       untilAge: 63,
     }),
     createHouseholdCharge({
       label: "Pension alimentaire",
       category: "pension",
-      monthlyAmount: 320,
+      monthlyAmount: 250, // Ajusté pour classe moyenne (était 320)
       untilAge: 60,
     }),
   ],
   childCharges: defaultChildren.map((child) => ({
     childName: child.firstName,
-    monthlyAmount: 250,
+    monthlyAmount: 200, // Ajusté pour classe moyenne (était 250)
     untilAge: child.departureAge,
   })),
-  investmentAccounts: [],
+  investmentAccounts: [
+    // PEA de Claire - Investissement en actions avec avantages fiscaux
+    // Capital actuel ajusté pour classe moyenne : 5 000€ au lieu de 1 000€
+    createInvestmentAccount({
+      type: "pea",
+      label: "PEA de Claire",
+      ownerName: "Claire",
+      currentAmount: 5000, // Ajusté pour classe moyenne (était 1000)
+      monthlyContribution: 200, // Ajusté pour classe moyenne : total épargne ~500€/mois (était 600)
+      allocationActions: 80,
+      allocationObligations: 15,
+      allocationLivrets: 0,
+      allocationCrypto: 0,
+      allocationOther: 5,
+      openingDateAge: 30, // Ouvert à 30 ans
+      initialCostBasis: 5000, // Ajusté (était 1000)
+    }),
+    // Assurance-vie de Marc - Placement diversifié
+    createInvestmentAccount({
+      type: "assurance_vie",
+      label: "Assurance-vie de Marc",
+      ownerName: "Marc",
+      currentAmount: 5000, // Ajusté pour classe moyenne (était 1000)
+      monthlyContribution: 200, // Ajusté pour classe moyenne (était 500)
+      allocationActions: 60,
+      allocationObligations: 30,
+      allocationLivrets: 5,
+      allocationCrypto: 0,
+      allocationOther: 5,
+      openingDateAge: 32,
+      initialCostBasis: 5000, // Ajusté (était 1000)
+    }),
+    // PER couple - Épargne retraite avec avantages fiscaux
+    createInvestmentAccount({
+      type: "per",
+      label: "PER du couple",
+      ownerName: undefined, // Compte couple
+      currentAmount: 3000, // Ajusté pour classe moyenne (était 1000)
+      monthlyContribution: 100, // Ajusté pour classe moyenne (était 300)
+      allocationActions: 70,
+      allocationObligations: 25,
+      allocationLivrets: 0,
+      allocationCrypto: 0,
+      allocationOther: 5,
+      openingDateAge: 35,
+      initialCostBasis: 3000, // Ajusté (était 1000)
+    }),
+    // Livret A - Liquidité et sécurité
+    createInvestmentAccount({
+      type: "livret",
+      label: "Livret A",
+      ownerName: undefined,
+      currentAmount: 10000, // Conservé (réserve d'urgence typique classe moyenne)
+      monthlyContribution: 0, // Pas de versement mensuel sur livret A par défaut (était 200)
+      allocationActions: 0,
+      allocationObligations: 0,
+      allocationLivrets: 100,
+      allocationCrypto: 0,
+      allocationOther: 0,
+      openingDateAge: 25,
+      initialCostBasis: 10000,
+    }),
+  ],
   taxParameters: {
     isCouple: true,
     tmiSavingsPhase: 0.30, // 30% par défaut
@@ -154,24 +235,20 @@ const initialFormState: SimulationInput = {
     maxIterations: 100, // 100 tirages maximum (comme avant)
     batchSize: 500, // Lots de 500 tirages
   },
-  targetMonthlyIncome: 3200,
+  // Calcul du revenu net cible pour maintenir le pouvoir d'achat (75% du revenu actuel)
+  // Ce montant doit être supérieur à la pension d'État pour avoir un complément d'épargne
+  targetMonthlyIncome: Math.round(
+    defaultAdults.reduce((sum, adult) => sum + (adult.monthlyNetIncome ?? 0), 0) * 0.75,
+  ),
+  // Pension d'État estimée (50% du revenu actuel)
   statePensionMonthlyIncome: Math.round(
     defaultAdults.reduce((sum, adult) => sum + (adult.monthlyNetIncome ?? 0), 0) * 0.5,
   ),
   housingLoanEndAge: undefined,
   dependentsDepartureAge: undefined,
-  additionalIncomeStreams: [
-    {
-      label: "Location appartement",
-      monthlyAmount: 750,
-      startAge: defaultAdults[0]?.currentAge ?? 40,
-    },
-    {
-      label: "Dividendes",
-      monthlyAmount: 120,
-      startAge: (defaultAdults[0]?.currentAge ?? 40) + 1,
-    },
-  ],
+  // Revenus additionnels : non inclus par défaut pour la classe moyenne
+  // La plupart des ménages de classe moyenne n'ont pas de revenus locatifs ou de dividendes significatifs
+  additionalIncomeStreams: [],
 };
 
 /**

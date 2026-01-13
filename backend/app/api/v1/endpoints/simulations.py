@@ -35,7 +35,11 @@ from app.services.progress import create_progress_task, get_progress
 
 logger = logging.getLogger(__name__)
 
+# Router principal pour tous les endpoints de simulations
 router = APIRouter(prefix="/simulations", tags=["simulations"])
+
+# Router pour les endpoints de calcul uniquement (ne nécessite pas la base de données)
+calculations_router = APIRouter(prefix="/simulations", tags=["simulations"])
 
 
 @router.get("/", response_model=list[SimulationRead])
@@ -212,7 +216,8 @@ def delete_simulation(
     simulation_service.delete_simulation(db, simulation)
 
 
-@router.post("/capitalization-preview", response_model=CapitalizationResult)
+# Endpoints de calcul (ne nécessitent pas la base de données)
+@calculations_router.post("/capitalization-preview", response_model=CapitalizationResult)
 def compute_capitalization_preview(payload: CapitalizationInput) -> CapitalizationResult:
     """
     Calcule une prévisualisation déterministe de la phase de capitalisation.
@@ -229,7 +234,7 @@ def compute_capitalization_preview(payload: CapitalizationInput) -> Capitalizati
     return capitalization_service.simulate_capitalization_phase(payload)
 
 
-@router.post("/monte-carlo", response_model=MonteCarloResult)
+@calculations_router.post("/monte-carlo", response_model=MonteCarloResult)
 def compute_monte_carlo_projection(payload: MonteCarloInput) -> MonteCarloResult:
     """
     Calcule une simulation Monte Carlo de la phase de capitalisation jusqu'à la retraite.
@@ -246,7 +251,7 @@ def compute_monte_carlo_projection(payload: MonteCarloInput) -> MonteCarloResult
     return monte_carlo_service.simulate_monte_carlo(payload)
 
 
-@router.post("/retirement-monte-carlo", response_model=RetirementMonteCarloResult)
+@calculations_router.post("/retirement-monte-carlo", response_model=RetirementMonteCarloResult)
 def compute_retirement_monte_carlo(payload: RetirementMonteCarloInput) -> RetirementMonteCarloResult:
     """
     Calcule une simulation Monte Carlo de la phase de retraite (décumulation).
@@ -283,7 +288,7 @@ def compute_retirement_monte_carlo(payload: RetirementMonteCarloInput) -> Retire
     return result
 
 
-@router.get("/progress/{task_id}")
+@calculations_router.get("/progress/{task_id}")
 async def stream_progress(task_id: str):
     """
     Stream de progression en temps réel via Server-Sent Events (SSE).
@@ -348,22 +353,31 @@ async def stream_progress(task_id: str):
     )
 
 
-@router.post("/recommended-savings", response_model=RecommendedSavingsResult)
+@calculations_router.post("/recommended-savings", response_model=RecommendedSavingsResult)
 def compute_recommended_savings(
     payload: SavingsOptimizationInput,
     task_id: Optional[str] = Query(None, description="Identifiant de la tâche de progression (optionnel)"),
+    use_rl: bool = Query(False, description="Utiliser l'optimisation par Reinforcement Learning (expérimental)"),
+    rl_episodes: int = Query(1000, description="Nombre d'épisodes pour l'entraînement RL (si use_rl=True)"),
+    use_pre_trained: bool = Query(False, description="Utiliser un modèle pré-entraîné au lieu d'entraîner (si use_rl=True)"),
 ) -> RecommendedSavingsResult:
     """
     Optimise l'épargne mensuelle nécessaire pour atteindre un capital cible à l'âge de décès.
     
-    Utilise un algorithme de recherche par bissection pour trouver le facteur
-    d'épargne mensuelle qui permet au capital médian d'atteindre le capital cible
-    (généralement 0) à l'âge de décès, en combinant les phases de capitalisation
-    et de retraite.
+    Deux méthodes disponibles :
+    1. Optimisation classique (défaut) : Utilise un algorithme de recherche par bissection
+       pour trouver le facteur d'épargne mensuelle qui permet au capital médian d'atteindre
+       le capital cible (généralement 0) à l'âge de décès.
+    
+    2. Optimisation RL (expérimental) : Utilise le Reinforcement Learning pour apprendre
+       une stratégie adaptative d'épargne et d'allocation qui s'ajuste dans le temps.
     
     Args:
         payload: Paramètres d'optimisation (inclut les paramètres de capitalisation et retraite)
         task_id: Identifiant optionnel de la tâche de progression (pour le suivi en temps réel)
+        use_rl: Si True, utilise l'optimisation RL au lieu de la méthode classique
+        rl_episodes: Nombre d'épisodes d'entraînement RL (seulement si use_rl=True)
+        use_pre_trained: Si True et use_rl=True, cherche et utilise un modèle pré-entraîné existant au lieu d'entraîner
         
     Returns:
         Résultat de l'optimisation avec l'épargne mensuelle recommandée, les résultats
@@ -371,10 +385,36 @@ def compute_recommended_savings(
     """
     # Créer la tâche de progression si task_id fourni (si elle n'existe pas déjà)
     if task_id and get_progress(task_id) is None:
-        create_progress_task(total_steps=3, initial_step="initialisation", task_id=task_id)
+        total_steps = 5 if use_rl else 3  # Plus d'étapes pour RL
+        create_progress_task(total_steps=total_steps, initial_step="initialisation", task_id=task_id)
         logger.info(f"Tâche de progression créée dans POST: {task_id}")
     
-    return monte_carlo_service.optimize_savings_plan(payload, task_id=task_id)
+    if use_rl:
+        # Utiliser l'optimisation RL
+        try:
+            from app.services.monte_carlo.optimization import optimize_with_rl
+            logger.info(f"Optimisation RL demandée avec {rl_episodes} épisodes (use_pre_trained={use_pre_trained})")
+            return optimize_with_rl(
+                payload=payload,
+                task_id=task_id,
+                episodes=rl_episodes,
+                use_pre_trained=use_pre_trained,
+            )
+        except ImportError as e:
+            logger.error(f"RL non disponible: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Optimisation RL non disponible. Les dépendances ML ne sont pas installées.",
+            )
+        except Exception as e:
+            logger.error(f"Erreur lors de l'optimisation RL: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Erreur lors de l'optimisation RL: {str(e)}",
+            )
+    else:
+        # Utiliser l'optimisation classique
+        return monte_carlo_service.optimize_savings_plan(payload, task_id=task_id)
 
 
 def _get_owned_simulation_or_404(db: Session, simulation_id: int, user: User) -> Simulation:

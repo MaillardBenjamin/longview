@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
-import { Box, Card, CardContent, Typography } from "@mui/material";
+import { Box, Card, CardContent, Typography, useTheme } from "@mui/material";
 import type { OptimizationStep } from "@/types/simulation";
 
 interface OptimizationIterationsChartProps {
@@ -24,6 +24,9 @@ function formatCurrency(value: number, fractionDigits = 0) {
 }
 
 export function OptimizationIterationsChart({ steps }: OptimizationIterationsChartProps) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
   const chartOption = useMemo(() => {
     if (!steps || steps.length === 0) {
       return null;
@@ -36,11 +39,30 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
     const finalCapitals = steps.map((step) => step.finalCapital);
     const effectiveFinalCapitals = steps.map((step) => step.effectiveFinalCapital);
 
+    // Couleurs pour le mode sombre
+    const backgroundColor = isDark ? "#1e293b" : "#ffffff";
+    const textColor = isDark ? "#e2e8f0" : "#0f172a";
+    const axisLineColor = isDark ? "#334155" : "#e2e8f0";
+    const splitLineColor = isDark ? "#334155" : "#f1f5f9";
+    const tooltipBackgroundColor = isDark ? "#1e293b" : "#ffffff";
+    const tooltipBorderColor = isDark ? "#475569" : "#e2e8f0";
+    const tooltipTextColor = isDark ? "#e2e8f0" : "#0f172a";
+
     return {
+      backgroundColor: backgroundColor,
+      textStyle: {
+        color: textColor,
+      },
       tooltip: {
         trigger: "axis",
         axisPointer: {
           type: "cross",
+        },
+        backgroundColor: tooltipBackgroundColor,
+        borderColor: tooltipBorderColor,
+        borderWidth: 1,
+        textStyle: {
+          color: tooltipTextColor,
         },
         formatter: (params: any) => {
           const index = params?.[0]?.dataIndex ?? 0;
@@ -66,6 +88,9 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
       legend: {
         data: ["Facteur d'échelle", "Épargne mensuelle", "Capital final", "Capital effectif"],
         bottom: 0,
+        textStyle: {
+          color: textColor,
+        },
       },
       grid: {
         left: "3%",
@@ -81,13 +106,36 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
         name: "Itération",
         nameLocation: "middle",
         nameGap: 30,
+        nameTextStyle: {
+          color: textColor,
+        },
+        axisLine: {
+          lineStyle: {
+            color: axisLineColor,
+          },
+        },
+        axisLabel: {
+          color: textColor,
+        },
+        splitLine: {
+          show: false,
+        },
       },
       yAxis: [
         {
           type: "value",
           name: "Facteur / Épargne (€)",
           position: "left",
+          nameTextStyle: {
+            color: textColor,
+          },
+          axisLine: {
+            lineStyle: {
+              color: axisLineColor,
+            },
+          },
           axisLabel: {
+            color: textColor,
             formatter: (value: number) => {
               // Formatter pour le facteur d'échelle (petites valeurs) ou l'épargne (grandes valeurs)
               if (value < 10) {
@@ -96,13 +144,31 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
               return formatCurrency(value as number);
             },
           },
+          splitLine: {
+            lineStyle: {
+              color: splitLineColor,
+              type: "dashed",
+            },
+          },
         },
         {
           type: "value",
           name: "Capital (€)",
           position: "right",
+          nameTextStyle: {
+            color: textColor,
+          },
+          axisLine: {
+            lineStyle: {
+              color: axisLineColor,
+            },
+          },
           axisLabel: {
+            color: textColor,
             formatter: (value: number) => formatCurrency(value as number),
+          },
+          splitLine: {
+            show: false,
           },
         },
       ],
@@ -179,7 +245,7 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
         },
       ],
     };
-  }, [steps]);
+  }, [steps, isDark]);
 
   if (!steps || steps.length === 0) {
     return null;
@@ -188,10 +254,14 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
   return (
     <Card
       sx={{
-        background: "rgba(255, 255, 255, 0.92)",
+        background: isDark ? "rgba(30, 41, 59, 0.92)" : "rgba(255, 255, 255, 0.92)",
         borderRadius: "1.25rem",
-        boxShadow: "0 16px 28px rgba(148, 163, 184, 0.15)",
-        border: "1px solid rgba(148, 163, 184, 0.2)",
+        boxShadow: isDark 
+          ? "0 16px 28px rgba(0, 0, 0, 0.3)" 
+          : "0 16px 28px rgba(148, 163, 184, 0.15)",
+        border: isDark 
+          ? "1px solid rgba(51, 65, 85, 0.5)" 
+          : "1px solid rgba(148, 163, 184, 0.2)",
       }}
     >
       <CardContent sx={{ p: { xs: 2, md: 3 } }}>
@@ -202,7 +272,7 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
           sx={{
             fontSize: { xs: "1.5rem", md: "1.75rem" },
             fontWeight: 700,
-            color: "#0f172a",
+            color: isDark ? "#f8fafc" : "#0f172a",
             mb: 0.5,
           }}
         >
@@ -215,7 +285,7 @@ export function OptimizationIterationsChart({ steps }: OptimizationIterationsCha
             mb: 3,
             fontSize: "0.95rem",
             lineHeight: 1.5,
-            color: "#475569",
+            color: isDark ? "#cbd5e1" : "#475569",
           }}
         >
           Évolution du facteur d&apos;échelle, de l&apos;épargne mensuelle et du capital final au fil des itérations

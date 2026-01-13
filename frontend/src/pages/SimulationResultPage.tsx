@@ -11,6 +11,7 @@ import { ResultsSkeleton } from "@/components/shared/SkeletonLoader";
 import { useAuth } from "@/hooks/useAuth";
 import { listSimulations, simulateMonteCarlo } from "@/services/simulations";
 import { OptimizationIterationsChart } from "@/components/results/OptimizationIterationsChart";
+import { RLStrategyChart } from "@/components/results/RLStrategyChart";
 import { InvestmentAllocationCharts } from "@/components/results/InvestmentAllocationCharts";
 import type {
   AdditionalIncome,
@@ -44,14 +45,24 @@ interface LocationState {
   optimizationScale?: number;
   optimizationResidualError?: number;
   optimizationResidualErrorRatio?: number;
+  useRL?: boolean;
 }
 
 function formatCurrency(value: number, fractionDigits = 0) {
+  // Gérer les cas limites (NaN, Infinity, null, undefined)
+  if (!Number.isFinite(value)) {
+    return "0,00 €";
+  }
+  
+  // Formater avec séparateurs de milliers (espaces) et symbole €
+  // Le format français utilise des espaces comme séparateurs de milliers
+  // Exemple: 1 000 000,00 €
   return value.toLocaleString("fr-FR", {
     style: "currency",
     currency: "EUR",
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
+    useGrouping: true, // Force l'utilisation des séparateurs de milliers (espaces en français)
   });
 }
 
@@ -305,6 +316,7 @@ const marketAssumptions =
   const minimumCapitalAtRetirement = locationState?.minimumCapitalAtRetirement;
   const optimizationSteps = locationState?.optimizationSteps ?? [];
   const optimizationScale = locationState?.optimizationScale;
+  const useRL = locationState?.useRL ?? false;
   const optimizationResidualError = locationState?.optimizationResidualError ?? null;
   const optimizationResidualErrorRatio = locationState?.optimizationResidualErrorRatio ?? null;
 
@@ -797,6 +809,11 @@ const marketAssumptions =
       {optimizationSteps.length > 0 && (
         <Box sx={{ mt: { xs: 3, md: 5 } }}>
           <OptimizationIterationsChart steps={optimizationSteps} />
+        </Box>
+      )}
+      {useRL && savingsPhases && savingsPhases.length > 0 && (
+        <Box sx={{ mt: { xs: 3, md: 5 } }}>
+          <RLStrategyChart savingsPhases={savingsPhases} isRLStrategy={true} />
         </Box>
       )}
     </Container>

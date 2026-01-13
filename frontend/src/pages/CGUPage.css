@@ -115,6 +115,63 @@
   margin-bottom: 0;
 }
 
+/* Mode sombre */
+.layout--dark .cgu-page__header {
+  border-bottom-color: #334155;
+}
+
+.layout--dark .cgu-page__header h1 {
+  color: #f8fafc;
+}
+
+.layout--dark .cgu-page__last-update {
+  color: #cbd5e1;
+}
+
+.layout--dark .cgu-page__content {
+  color: #e2e8f0;
+}
+
+.layout--dark .cgu-page__section h2 {
+  color: #f8fafc;
+}
+
+.layout--dark .cgu-page__section h3 {
+  color: #e2e8f0;
+}
+
+.layout--dark .cgu-page__warning {
+  background: #451a03;
+  border-left-color: #f59e0b;
+}
+
+.layout--dark .cgu-page__warning strong {
+  color: #fbbf24;
+}
+
+.layout--dark .cgu-page__section--highlight {
+  background: #7f1d1d;
+  border-color: #ef4444;
+}
+
+.layout--dark .cgu-page__section--highlight h2 {
+  color: #fca5a5;
+}
+
+.layout--dark .cgu-page__link {
+  color: #60a5fa;
+}
+
+.layout--dark .cgu-page__link:hover {
+  color: #3b82f6;
+}
+
+.layout--dark .cgu-page__info-box {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
 @media (max-width: 768px) {
   .cgu-page {
     padding: 1.5rem 0.75rem;

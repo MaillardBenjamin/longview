@@ -1,0 +1,10 @@
+{
+  "deploy": {
+    "type": "static"
+  },
+  "build": {
+    "type": "npm",
+    "command": "npm ci && npm run build"
+  },
+  "outputDirectory": "dist"
+}

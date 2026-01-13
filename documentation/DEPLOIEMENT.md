@@ -7,9 +7,9 @@ Ce guide décrit les étapes pour déployer LongView en production.
 ## Prérequis
 
 - Serveur Linux (Ubuntu 20.04+ recommandé)
-- Python 3.13+
-- Node.js 18+
-- PostgreSQL 14+
+- Python 3.11 ou supérieur
+- Node.js 18 ou supérieur
+- PostgreSQL 12 ou supérieur
 - Nginx (optionnel, pour reverse proxy)
 - Certbot (pour SSL/TLS)
 
@@ -41,7 +41,7 @@ Ce guide décrit les étapes pour déployer LongView en production.
 sudo apt update && sudo apt upgrade -y
 
 # Installation des dépendances
-sudo apt install -y python3.13 python3.13-venv python3-pip postgresql postgresql-contrib nginx
+sudo apt install -y python3.11 python3.11-venv python3-pip postgresql postgresql-contrib nginx
 ```
 
 ### 2. Configuration de PostgreSQL
@@ -64,7 +64,7 @@ git clone https://github.com/votre-repo/longview.git
 cd longview/backend
 
 # Créer l'environnement virtuel
-python3.13 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 
 # Installer les dépendances
@@ -411,6 +411,11 @@ Pour une charge élevée, considérer :
 2. **Base de données répliquée** : PostgreSQL avec réplication maître-esclave
 3. **Cache Redis** : Pour mettre en cache les résultats de simulation
 4. **Queue de tâches** : Celery pour les calculs longs
+
+
+
+
+
 
 
 

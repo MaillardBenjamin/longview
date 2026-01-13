@@ -10,3 +10,17 @@ passlib==1.7.4
 bcrypt==3.2.2
 python-jose[cryptography]
 python-multipart
+
+# Machine Learning dependencies for RL optimization
+numpy>=1.24.0
+gymnasium>=0.29.0
+stable-baselines3>=2.0.0
+# Progress bar dependencies for stable-baselines3
+tqdm>=4.65.0
+rich>=13.0.0
+# MLX for Apple Silicon optimization (M4 Pro)
+mlx>=0.1.0
+# PyTorch as alternative (with Metal support on Mac)
+torch>=2.0.0
+# Additional ML utilities
+scikit-learn>=1.3.0

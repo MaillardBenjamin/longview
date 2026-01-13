@@ -660,6 +660,9 @@ export async function optimizeSavingsPlan(
   onProgress?: ProgressCallback,
   capitalizationOnly?: boolean,
   calculateMinimumSavings?: boolean,
+  useRL?: boolean,
+  rlEpisodes?: number,
+  usePreTrained?: boolean,
 ): Promise<{
   scale: number;
   recommendedMonthlySavings: number;
@@ -806,9 +809,23 @@ export async function optimizeSavingsPlan(
       });
   }
   
+  // Construire les query parameters
+  const queryParams = new URLSearchParams({
+    task_id: taskId,
+  });
+  if (useRL) {
+    queryParams.append("use_rl", "true");
+    if (rlEpisodes) {
+      queryParams.append("rl_episodes", rlEpisodes.toString());
+    }
+    if (usePreTrained) {
+      queryParams.append("use_pre_trained", "true");
+    }
+  }
+  
   // Ajouter task_id comme query parameter
   const response = await apiClient.post(
-    `/simulations/recommended-savings?task_id=${encodeURIComponent(taskId)}`,
+    `/simulations/recommended-savings?${queryParams.toString()}`,
     payload
   );
   

@@ -26,38 +26,45 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import "./App.css";
 
 export default function App() {
+  // Vérifier si l'authentification est activée (désactivée par défaut en production)
+  const enableAuth = import.meta.env.VITE_ENABLE_AUTH === "true";
+  
   return (
     <PrimaryLayout>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/simulation" element={<OnboardingPage />} />
         <Route path="/resultats" element={<SimulationResultPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route
-          path="/projects"
-          element={
-            <ProtectedRoute>
-              <ProjectsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/projects/:projectId"
-          element={
-            <ProtectedRoute>
-              <ProjectDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
+        {enableAuth && (
+          <>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route
+              path="/projects"
+              element={
+                <ProtectedRoute>
+                  <ProjectsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/projects/:projectId"
+              element={
+                <ProtectedRoute>
+                  <ProjectDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+          </>
+        )}
         <Route path="/a-propos" element={<AboutPage />} />
         <Route path="/cgu" element={<CGUPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />

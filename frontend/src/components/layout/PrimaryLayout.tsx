@@ -25,6 +25,9 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [currentProjectName, setCurrentProjectName] = useState<string | null>(null);
   const [currentSimulationName, setCurrentSimulationName] = useState<string | null>(null);
+  
+  // Vérifier si l'authentification est activée (désactivée par défaut en production)
+  const enableAuth = import.meta.env.VITE_ENABLE_AUTH === "true";
 
   // Récupérer le projet courant depuis sessionStorage
   const currentProjectId = typeof window !== "undefined" 
@@ -184,7 +187,7 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
               {mode === "dark" ? <Brightness7 /> : <Brightness4 />}
             </IconButton>
           </Tooltip>
-          {user ? (
+          {enableAuth && user ? (
             <>
               <Link to="/projects" className="layout__nav-link" style={{ marginRight: "1rem" }}>
                 Mes projets
@@ -288,7 +291,7 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
                 )}
               </div>
             </>
-          ) : (
+          ) : enableAuth && !user ? (
             <>
               <Link to="/login" className="layout__button" style={{ marginRight: "0.5rem" }}>
                 Connexion
@@ -297,7 +300,7 @@ export function PrimaryLayout({ children }: { children: React.ReactNode }) {
                 Créer un compte
               </Link>
             </>
-          )}
+          ) : null}
         </div>
       </header>
       <main className="layout__main">{children}</main>

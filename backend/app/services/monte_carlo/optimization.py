@@ -3,10 +3,13 @@ Module d'optimisation des plans d'épargne.
 
 Utilise une recherche par dichotomie (bisection) pour trouver le facteur d'échelle
 optimal des épargnes mensuelles permettant d'atteindre un capital cible à la fin de vie.
+
+Aussi supporte l'optimisation via Reinforcement Learning (RL) pour trouver
+des stratégies adaptatives dans le temps.
 """
 
 import logging
-from typing import Dict, List, NamedTuple
+from typing import Dict, List, NamedTuple, Optional
 
 from app.schemas.projections import (
     InvestmentAccount,
@@ -29,6 +32,21 @@ from app.services.progress import (
     fail_progress,
     update_progress,
 )
+
+# Import RL (optionnel - gère l'absence de dépendances)
+try:
+    from app.services.monte_carlo.rl.trainer import RLTrainer, optimize_rl_config_for_m4_pro
+    from app.services.monte_carlo.rl.config import RLConfig
+    from app.services.monte_carlo.rl.predictor import RLStrategyPredictor
+    from app.services.monte_carlo.rl.model_storage import (
+        get_model_path,
+        find_existing_model,
+        find_general_model,
+    )
+    RL_AVAILABLE = True
+except ImportError:
+    RL_AVAILABLE = False
+    logger.warning("RL dependencies not available. optimize_with_rl() will not work.")
 
 logger = logging.getLogger("uvicorn.error").getChild("monte_carlo.optimization")
 
@@ -1512,4 +1530,281 @@ def compute_account_weights(accounts: List[InvestmentAccount]) -> List[float]:
         equal_weight = 1.0 / len(accounts)
         return [equal_weight for _ in accounts]
     return [weight / total for weight in raw_weights]
+
+
+def optimize_with_rl(
+    payload: SavingsOptimizationInput,
+    task_id: str | None = None,
+    episodes: int = 1000,
+    model_path: str | None = None,
+    use_pre_trained: bool = False,
+) -> RecommendedSavingsResult:
+    """
+    Optimise le plan d'épargne en utilisant le Reinforcement Learning.
+    
+    Cette méthode entraîne un agent RL qui apprend une stratégie adaptative
+    d'épargne et d'allocation d'actifs au fil du temps.
+    
+    Args:
+        payload: Paramètres d'optimisation (profils, comptes, objectifs)
+        task_id: ID de tâche pour le suivi de progression
+        episodes: Nombre d'épisodes d'entraînement
+        model_path: Chemin pour sauvegarder/charger le modèle
+        use_pre_trained: Si True, charge un modèle pré-entraîné au lieu d'entraîner
+    
+    Returns:
+        Résultat de l'optimisation avec la stratégie RL apprise
+    
+    Raises:
+        ImportError: Si les dépendances RL ne sont pas disponibles
+    """
+    if not RL_AVAILABLE:
+        raise ImportError(
+            "Les dépendances RL ne sont pas disponibles. "
+            "Installez torch, gymnasium et stable-baselines3."
+        )
+    
+    logger.info(
+        "=== DÉBUT OPTIMISATION RL === Objectif: %.2f € en fin de vie",
+        payload.target_final_capital
+    )
+    
+    if task_id:
+        update_progress(
+            task_id,
+            current_step="rl_training",
+            step_description="Initialisation de l'entraînement RL",
+            progress_percent=0.0,
+            message="Préparation de l'environnement RL...",
+        )
+    
+    # Générer le chemin de sauvegarde si non fourni
+    if model_path is None:
+        model_path = get_model_path(payload, episodes)
+        logger.info(f"Chemin de sauvegarde généré: {model_path}")
+    
+    # Chercher un modèle existant si demandé
+    existing_model = None
+    if use_pre_trained:
+        # D'abord chercher le modèle général (fonctionne pour tous les utilisateurs)
+        existing_model = find_general_model(network_size="solid", model_name="general")
+        
+        # Si pas de modèle général, chercher un modèle spécifique au profil
+        if not existing_model:
+            existing_model = find_existing_model(payload, episodes)
+        
+        if existing_model:
+            logger.info(f"Modèle pré-entraîné trouvé: {existing_model}")
+            model_path = existing_model
+        else:
+            logger.warning("Aucun modèle pré-entraîné trouvé, nouvel entraînement nécessaire")
+    
+    # Créer la configuration RL optimisée pour M4 Pro
+    config = RLConfig(episodes=episodes)
+    config = optimize_rl_config_for_m4_pro(config)
+    
+    # Créer le trainer (avec le chemin de sauvegarde automatique)
+    trainer = RLTrainer(
+        optimization_input=payload,
+        config=config,
+        model_path=model_path,
+    )
+    
+    # Entraîner ou charger le modèle
+    if use_pre_trained and existing_model:
+        logger.info(f"Utilisation du modèle pré-entraîné: {existing_model}")
+        # Le modèle est déjà chargé par le trainer si model_path existe
+    else:
+        logger.info(f"Entraînement du modèle RL pour {episodes} épisodes...")
+        if task_id:
+            update_progress(
+                task_id,
+                current_step="rl_training",
+                step_description=f"Entraînement RL ({episodes} épisodes)",
+                progress_percent=10.0,
+                message="Entraînement en cours... Cela peut prendre quelques minutes.",
+            )
+        
+        training_stats = trainer.train(episodes=episodes)
+        logger.info(
+            f"Entraînement terminé en {training_stats.get('training_time_minutes', 0):.2f} minutes. "
+            f"Récompense moyenne: {training_stats.get('mean_reward', 0):.3f}"
+        )
+    
+    if task_id:
+        update_progress(
+            task_id,
+            current_step="rl_prediction",
+            step_description="Génération de la stratégie optimisée",
+            progress_percent=80.0,
+            message="Génération de la stratégie d'épargne optimisée...",
+        )
+    
+    # Générer la stratégie optimisée
+    predictor = RLStrategyPredictor(
+        agent=trainer.agent,
+        optimization_input=payload,
+        config=config,
+    )
+    
+    strategy_points = predictor.predict_strategy(deterministic=True)
+    
+    # Convertir la stratégie en phases d'épargne
+    rl_savings_phases = predictor.strategy_to_savings_phases(
+        strategy_points,
+        min_phase_duration_months=12,
+    )
+    
+    # Calculer l'épargne mensuelle moyenne recommandée
+    avg_monthly_savings = (
+        sum(p.monthly_savings for p in strategy_points) / len(strategy_points)
+        if strategy_points
+        else 0.0
+    )
+    
+    logger.info(
+        f"Stratégie RL générée - Épargne moyenne: {avg_monthly_savings:.2f}€/mois, "
+        f"{len(rl_savings_phases)} phases"
+    )
+    
+    # Simuler avec la stratégie RL (utiliser l'optimisation classique avec les phases RL)
+    # Pour l'instant, on simule avec les phases générées
+    payload_with_rl_phases = payload.model_copy(
+        update={"savings_phases": rl_savings_phases}
+    )
+    
+    # Utiliser l'optimisation classique pour générer les courbes avec la stratégie RL
+    # (on réutilise le code existant mais avec les phases RL)
+    if task_id:
+        update_progress(
+            task_id,
+            current_step="rl_simulation",
+            step_description="Simulation Monte Carlo avec stratégie RL",
+            progress_percent=85.0,
+            message="Simulation des trajectoires avec la stratégie optimisée...",
+        )
+    
+    # Simuler la capitalisation avec la stratégie RL
+    from app.services.monte_carlo.simulation import simulate_monte_carlo
+    from app.schemas.projections import MonteCarloInput
+    
+    mc_input = MonteCarloInput(
+        adults=payload.adults,
+        savings_phases=rl_savings_phases,
+        investment_accounts=payload.investment_accounts,
+        market_assumptions=payload.market_assumptions,
+        confidence_level=payload.confidence_level,
+        tolerance_ratio=payload.tolerance_ratio,
+        max_iterations=payload.max_iterations,
+        batch_size=payload.batch_size,
+    )
+    
+    accumulation_rl = simulate_monte_carlo(mc_input, task_id=task_id)
+    capital_at_retirement_rl = accumulation_rl.median_final_capital
+    
+    # Simuler la retraite avec la stratégie RL (si pas en mode capitalisation uniquement)
+    retirement_rl = None
+    if not payload.capitalization_only:
+        if task_id:
+            update_progress(
+                task_id,
+                current_step="rl_retirement",
+                step_description="Simulation de retraite avec stratégie RL",
+                progress_percent=88.0,
+                message="Simulation des scénarios de retraite...",
+            )
+        
+        # Construire les comptes de retraite à partir du résultat de capitalisation RL
+        # On utilise les comptes avec les phases RL pour la répartition
+        rl_accounts = predictor.strategy_to_investment_allocation(
+            strategy_points,
+            payload.investment_accounts,
+        )
+        
+        # Générer les scénarios de retraite
+        retirement_rl = run_retirement_scenarios(
+            payload=payload,
+            scaled_accounts=rl_accounts,
+            accumulation_result=accumulation_rl,
+            task_id=task_id,
+        )
+    
+    # Calculer le capital minimum nécessaire
+    minimum_capital_at_retirement = find_minimum_retirement_capital(
+        payload=payload,
+        real_accounts=payload.investment_accounts,
+        capital_at_retirement_real=capital_at_retirement_rl,
+        capital_at_end_real=capital_at_retirement_rl,  # Approximation
+    )
+    
+    # Générer les courbes pour le capital minimum (si nécessaire)
+    optimal_retirement_rl = None
+    if not payload.capitalization_only and minimum_capital_at_retirement > 0:
+        if task_id:
+            update_progress(
+                task_id,
+                current_step="rl_minimum",
+                step_description="Simulation retraite avec capital minimum",
+                progress_percent=92.0,
+                message="Génération des courbes pour le capital minimum...",
+            )
+        
+        # Construire les comptes avec le capital minimum
+        minimum_accounts = build_retirement_accounts(
+            payload.investment_accounts,
+            minimum_capital_at_retirement,
+        )
+        
+        # Générer un scénario de retraite avec le capital minimum
+        minimum_retirement_result = run_single_retirement_scenario(
+            payload=payload,
+            retirement_accounts=minimum_accounts,
+            initial_capital=minimum_capital_at_retirement,
+            scenario_name="minimum_final",
+            task_id=None,
+            iterations_override=200,
+        )
+        
+        # Créer un RetirementScenarioResults avec le scénario minimum
+        optimal_retirement_rl = RetirementScenarioResults(
+            pessimistic=minimum_retirement_result,
+            median=minimum_retirement_result,
+            optimistic=minimum_retirement_result,
+        )
+    
+    if task_id:
+        update_progress(
+            task_id,
+            current_step="rl_complete",
+            step_description="Optimisation RL terminée",
+            progress_percent=95.0,
+            message="Optimisation RL terminée avec succès",
+        )
+    
+    # Retourner le résultat complet avec les simulations de retraite
+    result = RecommendedSavingsResult(
+        scale=1.0,  # Pas de scale avec RL
+        recommended_monthly_savings=avg_monthly_savings,
+        minimum_capital_at_retirement=minimum_capital_at_retirement,
+        monte_carlo_result=accumulation_rl,
+        retirement_results=retirement_rl,  # Résultats de retraite avec stratégie RL
+        optimal_monte_carlo_result=accumulation_rl,
+        optimal_retirement_results=optimal_retirement_rl,  # Résultats de retraite avec capital minimum
+        steps=[],  # Pas de steps avec RL
+        residual_error=capital_at_retirement_rl - payload.target_final_capital,
+        residual_error_ratio=(
+            (capital_at_retirement_rl - payload.target_final_capital)
+            / max(abs(payload.target_final_capital), 1.0)
+        ),
+    )
+    
+    logger.info(
+        "=== FIN OPTIMISATION RL === Épargne recommandée: %.2f €/mois",
+        avg_monthly_savings
+    )
+    
+    if task_id:
+        complete_progress(task_id, message="Optimisation RL terminée avec succès")
+    
+    return result
 

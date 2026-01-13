@@ -88,4 +88,3 @@ export async function updateUser(payload: UpdateUserPayload): Promise<User> {
   const response = await apiClient.put<User>("/auth/me", updateData);
   return response.data;
 }
-

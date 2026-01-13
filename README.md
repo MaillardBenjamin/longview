@@ -16,14 +16,14 @@
 
 ### Backend
 
-- **Framework** : FastAPI (Python 3.13+)
+- **Framework** : FastAPI (Python 3.11+)
 - **Base de données** : PostgreSQL avec SQLAlchemy
 - **Authentification** : JWT
 - **Simulation** : Algorithmes Monte Carlo avec décomposition de Cholesky pour les corrélations
 
 ### Frontend
 
-- **Framework** : React 18 avec TypeScript
+- **Framework** : React 19 avec TypeScript
 - **Routing** : React Router
 - **State Management** : React Query
 - **Visualisation** : ECharts
@@ -31,9 +31,9 @@
 
 ## 📋 Prérequis
 
-- Python 3.13+
-- Node.js 18+
-- PostgreSQL 14+
+- Python 3.11 ou supérieur
+- Node.js 18 ou supérieur
+- PostgreSQL 12 ou supérieur
 
 ## 🚀 Installation
 
@@ -148,6 +148,8 @@ LongView/
 ## 🤝 Contribution
 
 Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou une pull request.
+
+Pour plus d'informations sur comment contribuer, consultez le [Guide de Contribution](CONTRIBUTING.md).
 
 ## 📝 Licence
 

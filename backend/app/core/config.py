@@ -5,9 +5,9 @@ Charge les paramètres depuis les variables d'environnement ou un fichier .env.
 """
 
 from functools import lru_cache
-from typing import List
+from typing import List, Union
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +19,15 @@ class Settings(BaseSettings):
     d'environnement système.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", 
+        env_file_encoding="utf-8", 
+        extra="ignore",
+        # Ne pas essayer de parser automatiquement les valeurs complexes comme JSON
+        json_schema_extra={
+            "cors_origins": {"format": "string", "description": "Comma-separated list of CORS origins"}
+        }
+    )
 
     # Configuration de base de l'application
     project_name: str = Field(default="LongView")
@@ -31,20 +39,25 @@ class Settings(BaseSettings):
     algorithm: str = Field(default="HS256")
 
     # Configuration de la base de données
+    enable_database: bool = Field(
+        default=True,
+        description="Active ou désactive l'utilisation de la base de données. En production sans gestion de comptes, peut être désactivé."
+    )
     database_url: str = Field(
         default="postgresql+psycopg://postgres:postgres@localhost:5432/longview"
     )
 
     # Configuration CORS (origines autorisées)
-    cors_origins: List[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # Accepte une chaîne ou une liste pour permettre différents formats dans .env
+    cors_origins: Union[str, List[str]] = Field(default="http://localhost:5173")
 
     # Configuration de l'environnement
     environment: str = Field(default="local")
     debug: bool = Field(default=True)
 
-    @model_validator(mode="before")
+    @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, values: dict) -> dict:
+    def parse_cors_origins(cls, value: Union[str, List[str]]) -> List[str]:
         """
         Parse les origines CORS depuis une chaîne de caractères séparée par des virgules.
         
@@ -52,15 +65,18 @@ class Settings(BaseSettings):
         au lieu d'une liste.
         
         Args:
-            values: Dictionnaire des valeurs de configuration
+            value: Valeur à parser (chaîne ou liste)
             
         Returns:
-            Dictionnaire avec cors_origins converti en liste si nécessaire
+            Liste des origines CORS
         """
-        origins = values.get("cors_origins")
-        if isinstance(origins, str):
-            values["cors_origins"] = [origin.strip() for origin in origins.split(",") if origin.strip()]
-        return values
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            # Séparer par virgules et nettoyer les espaces
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        # Valeur par défaut si None ou autre type
+        return ["http://localhost:5173"]
 
 
 @lru_cache

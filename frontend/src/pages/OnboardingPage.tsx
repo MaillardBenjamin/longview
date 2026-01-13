@@ -82,6 +82,29 @@ export function OnboardingPage() {
     const saved = sessionStorage.getItem("lv_calculate_minimum_savings");
     return saved !== "false"; // Par défaut true
   });
+  // Vérifier si la fonctionnalité RL est activée (visible)
+  const enableRLFeature = import.meta.env.VITE_ENABLE_RL_OPTIMIZATION === "true";
+  
+  const [useRL, setUseRL] = useState(() => {
+    // Si la fonctionnalité est désactivée, forcer useRL à false
+    if (!enableRLFeature) {
+      return false;
+    }
+    const saved = sessionStorage.getItem("lv_use_rl_optimization");
+    if (saved !== null) {
+      return saved === "true";
+    }
+    // Utiliser la variable d'environnement comme valeur par défaut si rien n'est sauvegardé
+    return import.meta.env.VITE_ENABLE_RL_OPTIMIZATION === "true";
+  });
+  const [rlEpisodes, setRlEpisodes] = useState(() => {
+    const saved = sessionStorage.getItem("lv_rl_episodes");
+    return saved ? parseInt(saved, 10) : 1000;
+  });
+  const [usePreTrained, setUsePreTrained] = useState(() => {
+    const saved = sessionStorage.getItem("lv_use_pre_trained");
+    return saved === "true";
+  });
   const [showQuickStartGuide, setShowQuickStartGuide] = useState(() => {
     // Afficher le guide uniquement si l'utilisateur n'a pas choisi de ne plus l'afficher
     const dontShow = localStorage.getItem("lv_dont_show_quick_start_guide");
@@ -259,7 +282,7 @@ export function OnboardingPage() {
           message: progressEvent.message,
         });
         setProgress(progressEvent);
-      }, capitalizationOnly, calculateMinimumSavings),
+      }, capitalizationOnly, calculateMinimumSavings, useRL, rlEpisodes, usePreTrained),
     onSuccess: async (result) => {
       console.log("Résultat de l'optimisation reçu:", {
         scale: result.scale,
@@ -319,6 +342,7 @@ export function OnboardingPage() {
         optimizationSteps: result.steps,
         optimizationResidualError: result.residualError,
         optimizationResidualErrorRatio: result.residualErrorRatio,
+        useRL: useRL, // Ajouter le flag pour indiquer si RL a été utilisé
       };
       sessionStorage.setItem("lv_last_simulation_result", JSON.stringify(state));
       navigate("/resultats", { state });
@@ -568,6 +592,70 @@ export function OnboardingPage() {
                     </Typography>
                   }
                 />
+                {enableRLFeature && (
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={useRL}
+                        onChange={(e) => {
+                          setUseRL(e.target.checked);
+                          sessionStorage.setItem("lv_use_rl_optimization", String(e.target.checked));
+                        }}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          Optimisation intelligente par IA (expérimental)
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                          Utilise le Reinforcement Learning pour trouver une stratégie adaptative dans le temps.
+                          Temps estimé : {useRL 
+                            ? (usePreTrained 
+                                ? "10-30 secondes (modèle pré-entraîné)" 
+                                : `${Math.ceil(rlEpisodes / 200)}-${Math.ceil(rlEpisodes / 100)} minutes`)
+                            : "2-5 minutes"}
+                        </Typography>
+                        {useRL && (
+                          <Box sx={{ mt: 1 }}>
+                            <FormControlLabel
+                              control={
+                                <Checkbox
+                                  checked={usePreTrained}
+                                  onChange={(e) => {
+                                    setUsePreTrained(e.target.checked);
+                                    sessionStorage.setItem("lv_use_pre_trained", String(e.target.checked));
+                                  }}
+                                />
+                              }
+                              label={
+                                <Typography variant="caption" color="text.secondary">
+                                  Utiliser un modèle pré-entraîné (beaucoup plus rapide, ~10-30 secondes)
+                                </Typography>
+                              }
+                            />
+                            {!usePreTrained && (
+                            <TextField
+                              type="number"
+                              label="Nombre d'épisodes d'entraînement"
+                              value={rlEpisodes}
+                              onChange={(e) => {
+                                const value = Math.max(100, Math.min(10000, parseInt(e.target.value) || 1000));
+                                setRlEpisodes(value);
+                                sessionStorage.setItem("lv_rl_episodes", String(value));
+                              }}
+                              size="small"
+                              inputProps={{ min: 100, max: 10000, step: 100 }}
+                              sx={{ mt: 1, maxWidth: 200 }}
+                              helperText="Plus d'épisodes = meilleure stratégie mais plus long"
+                            />
+                          )}
+                        </Box>
+                      )}
+                    </Box>
+                  }
+                  />
+                )}
                 <FormControlLabel
                   control={
                     <Checkbox
