@@ -22,6 +22,10 @@ Prévoir la retraite d'un individu n'est pas une simple addition. Il faut modél
 
 Un calcul déterministe ne suffit pas. La vraie question est : *quelle est la probabilité d'atteindre mon objectif ?*
 
+![Interface de paramétrage LongView](images/longview-parametrage.png)
+
+*L'interface de paramétrage permet de saisir l'ensemble des informations nécessaires : profils des adultes, comptes d'investissement, objectifs de retraite, hypothèses de marché, etc.*
+
 ### Ma contrainte de départ
 
 Je ne suis pas actuaire ni expert en finance quantitative. Je comprends les concepts, mais je n'avais jamais implémenté de simulation Monte Carlo ni d'optimisation par dichotomie en production.
@@ -76,6 +80,10 @@ L'algorithme génère des milliers de scénarios probabilistes pour estimer la d
 ▹ **Batch processing** : vérification de convergence par lots pour optimiser le temps de calcul
 
 **Temps de calcul :** ~1-2 secondes pour 200 itérations, ~30-60 secondes pour l'optimisation complète.
+
+![Résultats de simulation Monte Carlo](images/longview-simulation.png)
+
+*Le graphique présente la phase de capitalisation avec les percentiles 10, 50 et 90%, montrant la distribution probabiliste du capital au fil du temps. Les courbes illustrent l'incertitude inhérente aux projections financières.*
 
 ### Optimisation par dichotomie
 
