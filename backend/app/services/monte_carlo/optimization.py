@@ -317,6 +317,9 @@ def optimize_savings_plan(
             Returns:
                 Résultat de l'évaluation
             """
+            # Import local pour éviter les problèmes de portée dans la closure
+            from app.schemas.projections import RetirementMonteCarloResult
+            
             nonlocal iteration_counter
             iteration_counter += 1
 
