@@ -97,8 +97,9 @@ Une documentation complète est disponible dans le répertoire [`documentation/`
 
 - **[API.md](documentation/API.md)** : Documentation complète de l'API REST
 - **[ALGORITHMES.md](documentation/ALGORITHMES.md)** : Description détaillée des algorithmes utilisés (Monte Carlo, optimisation, taxes)
-- **[ARCHITECTURE.md](documentation/ARCHITECTURE.md)** : Architecture technique de l'application
+- **[ARCHITECTURE.md](documentation/ARCHITECTURE.md)** : Architecture technique (avec diagrammes Mermaid)
 - **[DEPLOIEMENT.md](documentation/DEPLOIEMENT.md)** : Guide de déploiement en production
+- **[DIAGRAMMES.md](documentation/DIAGRAMMES.md)** : Index des diagrammes de la documentation
 
 ## 🧮 Modèle mathématique
 
@@ -149,7 +150,9 @@ LongView/
 
 Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou une pull request.
 
-Pour plus d'informations sur comment contribuer, consultez le [Guide de Contribution](CONTRIBUTING.md).
+- **[Guide de contribution](CONTRIBUTING.md)** : standards de code, tests, processus de revue
+- **[Code de conduite](CODE_OF_CONDUCT.md)** : comportement attendu dans la communauté
+- **[Signaler une vulnérabilité](SECURITY.md)** : politique de sécurité et contact
 
 ## 📝 Licence
 

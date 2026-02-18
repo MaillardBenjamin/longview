@@ -4,6 +4,13 @@ Bienvenue dans la documentation de LongView ! Cette documentation couvre tous le
 
 ## 📚 Documentation disponible
 
+### [DIAGRAMMES.md](./DIAGRAMMES.md)
+Index des diagrammes Mermaid (architecture, déploiement, algorithmes) et images PNG associées.
+
+**Contenu** : Vue d’ensemble des schémas, liens vers les diagrammes dans ARCHITECTURE, DEPLOIEMENT et ALGORITHMES.
+
+**Public cible** : Tous
+
 ### [API.md](./API.md)
 Documentation complète de l'API REST LongView.
 
@@ -81,10 +88,16 @@ Guide complet de déploiement en production.
 ```
 documentation/
 ├── README.md          # Ce fichier (index)
+├── DIAGRAMMES.md      # Index des diagrammes Mermaid et images
 ├── API.md             # Documentation API
-├── ALGORITHMES.md     # Algorithmes et calculs
-├── ARCHITECTURE.md    # Architecture technique
-└── DEPLOIEMENT.md     # Guide de déploiement
+├── ALGORITHMES.md     # Algorithmes et calculs (avec diagrammes Mermaid)
+├── ARCHITECTURE.md    # Architecture technique (avec diagrammes Mermaid)
+├── DEPLOIEMENT.md     # Guide de déploiement (avec diagramme Mermaid)
+├── DEPLOIEMENT_CLEVERCLOUD.md
+├── CHECKLIST_DEPLOIEMENT.md
+├── TROUBLESHOOTING.md # Dépannage frontend/backend
+├── RL_MODELS.md       # Modèles RL pré-entraînés
+└── images/            # Images et diagrammes PNG
 ```
 
 ## 🔄 Mise à jour
@@ -102,6 +115,9 @@ Les contributions à la documentation sont les bienvenues ! Pour contribuer :
 ## 🔗 Liens utiles
 
 - [README principal](../README.md) - Vue d'ensemble du projet
+- [CONTRIBUTING](../CONTRIBUTING.md) - Guide de contribution
+- [CODE_OF_CONDUCT](../CODE_OF_CONDUCT.md) - Code de conduite des contributeurs
+- [SECURITY](../SECURITY.md) - Signaler une vulnérabilité
 - [CGU](../CGU.md) - Conditions Générales d'Utilisation
 - [Mentions Légales](../MENTIONS_LEGALES.md)
 - [Politique de Confidentialité](../PRIVACY.md)

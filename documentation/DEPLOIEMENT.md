@@ -15,21 +15,18 @@ Ce guide décrit les étapes pour déployer LongView en production.
 
 ## Architecture de déploiement recommandée
 
-```
-┌─────────────┐
-│   Nginx     │ (Reverse proxy + SSL)
-└──────┬──────┘
-       │
-       ├──────────────┐
-       │              │
-┌──────▼──────┐  ┌────▼─────┐
-│   Frontend  │  │ Backend  │
-│   (React)   │  │(FastAPI) │
-└─────────────┘  └────┬─────┘
-                      │
-              ┌───────▼───────┐
-              │   PostgreSQL  │
-              └───────────────┘
+```mermaid
+flowchart TB
+    subgraph Internet
+        Client[Utilisateurs]
+    end
+    subgraph Serveur
+        Nginx[Nginx - Reverse proxy + SSL]
+        Nginx --> Frontend[Frontend React - fichiers statiques]
+        Nginx --> Backend[Backend FastAPI :8000]
+        Backend --> PostgreSQL[(PostgreSQL)]
+    end
+    Client --> Nginx
 ```
 
 ## Déploiement du Backend

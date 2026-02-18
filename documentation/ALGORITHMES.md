@@ -9,6 +9,17 @@ LongView utilise plusieurs algorithmes pour simuler l'évolution financière et 
 3. **Gestion des corrélations** : Décomposition de Cholesky pour les rendements corrélés
 4. **Calcul des taxes** : Modélisation de la fiscalité française
 
+```mermaid
+flowchart LR
+    A[Monte Carlo] --> B[Cholesky]
+    B --> C[Rendements corrélés]
+    C --> D[Capitalisation]
+    D --> E[Optimisation dichotomie]
+    E --> F[Épargne recommandée]
+    D --> G[Retraite]
+    G --> H[Taxes]
+```
+
 ## Simulation Monte Carlo
 
 ### Principe
@@ -16,6 +27,18 @@ LongView utilise plusieurs algorithmes pour simuler l'évolution financière et 
 La simulation Monte Carlo génère de nombreux scénarios aléatoires pour estimer la distribution probabiliste du capital futur. Chaque scénario représente une trajectoire possible des marchés financiers.
 
 ### Étapes du calcul
+
+```mermaid
+flowchart TD
+    I[Initialisation] --> M[Boucle par mois]
+    M --> R[Génération rendements corrélés]
+    R --> INF[Ajustement inflation]
+    INF --> ALLOC[Application allocation comptes]
+    ALLOC --> CONT[+ Contributions]
+    CONT --> TAX[Taxes si applicable]
+    TAX --> M
+    M --> A[Agrégation percentiles 10 / 50 / 90]
+```
 
 1. **Initialisation** : Capital de départ, comptes d'investissement, phases d'épargne
 2. **Pour chaque mois** :
@@ -77,6 +100,15 @@ Trouver le **facteur d'échelle** optimal des épargnes mensuelles pour atteindr
 ### Principe
 
 L'algorithme utilise une **recherche par dichotomie** (bisection) :
+
+```mermaid
+flowchart TD
+    E0[Éval. facteur 0] --> BORNE[Recherche borne sup. doublement]
+    BORNE --> DICH[Dichotomie low/high]
+    DICH --> CONV{Convergence ?}
+    CONV -->|Non| DICH
+    CONV -->|Oui| FIN[Éval. finale max itérations]
+```
 
 1. **Évaluation initiale** : Test avec facteur 0 (épargnes existantes uniquement)
 2. **Recherche de borne supérieure** : Doublement du facteur jusqu'à trouver une solution suffisante
@@ -240,6 +272,19 @@ Le `spending_ratio` est multiplié par `target_monthly_income` pour obtenir le b
 ## Scénarios de retraite
 
 L'algorithme calcule trois scénarios basés sur les percentiles de capitalisation :
+
+```mermaid
+flowchart LR
+    MC[Monte Carlo capitalisation] --> P10[P10]
+    MC --> P50[P50]
+    MC --> P90[P90]
+    P10 --> S1[Scénario pessimiste]
+    P50 --> S2[Scénario médian]
+    P90 --> S3[Scénario optimiste]
+    S1 --> RET[Trajectoires décumulation]
+    S2 --> RET
+    S3 --> RET
+```
 
 - **Pessimiste** : Capital initial = percentile 10 de la capitalisation
 - **Médian** : Capital initial = percentile 50 (médiane)

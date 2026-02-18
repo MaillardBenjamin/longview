@@ -4,17 +4,23 @@
 
 LongView est une application web full-stack avec une architecture séparée entre backend (Python/FastAPI) et frontend (React/TypeScript).
 
-```
-┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│   Client    │ ──────> │   Frontend  │ ──────> │   Backend   │
-│  (Browser)  │ <────── │   (React)   │ <────── │  (FastAPI)  │
-└─────────────┘         └─────────────┘         └─────────────┘
-                                                         │
-                                                         ▼
-                                                ┌─────────────┐
-                                                │ PostgreSQL  │
-                                                │  Database   │
-                                                └─────────────┘
+```mermaid
+flowchart LR
+    subgraph Client
+        A[Navigateur]
+    end
+    subgraph Frontend
+        B[React / TypeScript]
+    end
+    subgraph Backend
+        C[FastAPI]
+    end
+    subgraph Données
+        D[(PostgreSQL)]
+    end
+    A <-->|HTTP/JSON| B
+    B <-->|REST API| C
+    C <-->|SQLAlchemy| D
 ```
 
 ## Backend
@@ -71,61 +77,94 @@ backend/
 
 #### 1. Authentification
 
-```
-Client → POST /auth/login
-         ↓
-      FastAPI (auth.py)
-         ↓
-      Vérification credentials
-         ↓
-      Génération JWT
-         ↓
-      Retour token
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as auth.py
+    participant DB as Base de données
+    C->>A: POST /auth/login (email, password)
+    A->>DB: Vérification credentials
+    DB-->>A: Utilisateur
+    A->>A: Génération JWT
+    A-->>C: access_token
 ```
 
 #### 2. Création de simulation
 
-```
-Client → POST /simulations/
-         ↓
-      FastAPI (simulations.py)
-         ↓
-      Validation (Pydantic)
-         ↓
-      Service (simulations.py)
-         ↓
-      SQLAlchemy (models)
-         ↓
-      PostgreSQL
-         ↓
-      Retour simulation créée
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant E as simulations.py (endpoint)
+    participant S as Service simulations
+    participant DB as PostgreSQL
+    C->>E: POST /simulations/
+    E->>E: Validation Pydantic
+    E->>S: Création simulation
+    S->>DB: SQLAlchemy
+    DB-->>S: Simulation créée
+    S-->>C: Simulation (JSON)
 ```
 
 #### 3. Optimisation d'épargne
 
-```
-Client → POST /simulations/recommended-savings
-         ↓
-      FastAPI (simulations.py)
-         ↓
-      Service (monte_carlo/optimization.py)
-         ↓
-      ├─> Calcul capitalisation (scale=1.0)
-      │   └─> Monte Carlo (simulation.py)
-      │
-      ├─> Calcul retraite (scale=1.0)
-      │   └─> Monte Carlo (retirement.py)
-      │
-      └─> Optimisation dichotomie
-          ├─> Évaluation facteur 0
-          ├─> Recherche borne supérieure
-          ├─> Dichotomie
-          └─> Évaluation finale
-         ↓
-      Retour résultat optimisation
+```mermaid
+flowchart TB
+    A[POST /simulations/recommended-savings] --> B[FastAPI simulations.py]
+    B --> C[optimization.py]
+    C --> D[Capitalisation scale=1.0]
+    C --> E[Retraite scale=1.0]
+    C --> F[Optimisation dichotomie]
+    D --> G[simulation.py Monte Carlo]
+    E --> H[retirement.py Monte Carlo]
+    F --> F1[Éval. facteur 0]
+    F --> F2[Recherche borne sup.]
+    F --> F3[Dichotomie]
+    F --> F4[Évaluation finale]
+    G --> I[Résultat]
+    H --> I
+    F --> I
 ```
 
 ### Modèles de données
+
+```mermaid
+erDiagram
+    User ||--o{ Project : "possède"
+    User ||--o{ Simulation : "possède"
+    Project ||--o{ Simulation : "contient"
+    User {
+        int id PK
+        string email UK
+        string hashed_password
+        bool is_active
+        datetime created_at
+        datetime updated_at
+    }
+    Project {
+        int id PK
+        int user_id FK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    Simulation {
+        int id PK
+        int user_id FK
+        int project_id FK
+        string name
+        int current_age
+        int retirement_age
+        int life_expectancy
+        float target_monthly_income
+        float state_pension_monthly_income
+        json inputs_snapshot
+        json results_snapshot
+        bool is_active
+        datetime created_at
+        datetime updated_at
+    }
+```
 
 #### User
 
@@ -232,49 +271,35 @@ frontend/src/
 
 #### 1. Authentification
 
-```
-LoginPage
-  ↓
-useAuth hook
-  ↓
-auth service (auth.ts)
-  ↓
-API POST /auth/login
-  ↓
-Stockage token (localStorage)
-  ↓
-Mise à jour contexte AuthProvider
+```mermaid
+flowchart TD
+    A[LoginPage] --> B[useAuth hook]
+    B --> C[auth.ts]
+    C --> D[POST /auth/login]
+    D --> E[localStorage token]
+    E --> F[AuthProvider]
 ```
 
 #### 2. Création de simulation
 
-```
-OnboardingPage
-  ↓
-useSimulationForm hook
-  ↓
-optimizeSavingsPlan (simulations.ts)
-  ↓
-API POST /simulations/recommended-savings
-  ↓
-Mapping réponse (camelCase ↔ snake_case)
-  ↓
-Navigation vers SimulationResultPage
+```mermaid
+flowchart TD
+    A[OnboardingPage] --> B[useSimulationForm]
+    B --> C[optimizeSavingsPlan]
+    C --> D[POST /simulations/recommended-savings]
+    D --> E[Mapping camelCase ↔ snake_case]
+    E --> F[SimulationResultPage]
 ```
 
 #### 3. Affichage des résultats
 
-```
-SimulationResultPage
-  ↓
-Récupération données (location.state)
-  ↓
-Affichage cartes (épargne, capital, etc.)
-  ↓
-Composants graphiques (ECharts)
-  ├─> MonteCarloSection
-  ├─> RetirementMonteCarloSection
-  └─> OptimizationIterationsChart
+```mermaid
+flowchart TD
+    A[SimulationResultPage] --> B[location.state]
+    B --> C[Cartes épargne / capital]
+    B --> D[MonteCarloSection]
+    B --> E[RetirementMonteCarloSection]
+    B --> F[OptimizationIterationsChart]
 ```
 
 ### Gestion d'état
